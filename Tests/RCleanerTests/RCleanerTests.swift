@@ -102,4 +102,18 @@ final class RCleanerTests: XCTestCase {
         let tallCyan = ResitdcCyanShape().path(in: tallRect)
         XCTAssertEqual(tallCyan.boundingRect.width / tallCyan.boundingRect.height, 81.0 / 92.5, accuracy: 0.01)
     }
+
+    @MainActor
+    func testVoiceAssistantGreetingAndBriefing() {
+        let greeting = VoiceAssistantService.timeOfDayGreeting(address: "sir")
+        XCTAssertTrue(greeting.contains("sir"))
+        XCTAssertTrue(greeting.contains("R-Cleaner"))
+
+        var snap = SystemTelemetrySnapshot()
+        snap.storage.totalBytes = 500_000_000_000
+        snap.storage.availableBytes = 200_000_000_000
+        let briefing = VoiceAssistantService.systemBriefing(telemetry: snap, healthScore: 95, address: "sir")
+        XCTAssertTrue(briefing.contains("95 percent"))
+        XCTAssertTrue(briefing.contains("nominal"))
+    }
 }

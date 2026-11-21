@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// High-performance GPU-friendly aurora gradient background for R-Cleaner.
-/// Uses UnitPoint-anchored RadialGradients with zero GeometryReader, zero CPU blur passes,
-/// and zero per-frame layout invalidation so idle CPU stays at 0%.
+/// High-performance obsidian-aurora futuristic HUD background for R-Cleaner.
+/// Zero GeometryReader, zero CPU blur passes, zero idle frame invalidation.
 public struct LiveBackgroundView: View {
     public let module: RCleanerModule
     public let isActiveScan: Bool
@@ -18,36 +17,53 @@ public struct LiveBackgroundView: View {
         let palette = RCleanerTheme.palette(for: module)
 
         ZStack {
+            // Deep obsidian base for crisp contrast & futuristic clarity
             LinearGradient(
-                colors: [palette.backgroundTop, palette.backgroundMid, palette.backgroundBottom],
+                colors: [Color(hex: "060913"), palette.backgroundTop.opacity(0.88), Color(hex: "050811")],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
 
+            // Precision HUD radial light pools
             RadialGradient(
-                colors: [palette.primary.opacity(isActiveScan ? 0.34 : 0.24), .clear],
-                center: UnitPoint(x: 0.22, y: 0.20),
+                colors: [palette.primary.opacity(isActiveScan ? 0.28 : 0.17), .clear],
+                center: UnitPoint(x: 0.20, y: 0.16),
                 startRadius: 10,
-                endRadius: 520
+                endRadius: 500
             )
 
             RadialGradient(
-                colors: [palette.secondary.opacity(isActiveScan ? 0.30 : 0.20), .clear],
-                center: UnitPoint(x: 0.80, y: 0.78),
+                colors: [Color(hex: "19F8FF").opacity(isActiveScan ? 0.16 : 0.09), .clear],
+                center: UnitPoint(x: 0.84, y: 0.22),
                 startRadius: 10,
-                endRadius: 480
+                endRadius: 420
             )
 
             RadialGradient(
-                colors: [palette.accent.opacity(isActiveScan ? 0.20 : 0.12), .clear],
-                center: UnitPoint(x: 0.56, y: 0.38),
-                startRadius: 5,
-                endRadius: 360
+                colors: [palette.secondary.opacity(isActiveScan ? 0.22 : 0.13), .clear],
+                center: UnitPoint(x: 0.78, y: 0.84),
+                startRadius: 10,
+                endRadius: 460
             )
+
+            // Ultra-subtle futuristic precision dot-grid overlay
+            Canvas { ctx, size in
+                let spacing: CGFloat = 34
+                let dotColor = Color(hex: "19F8FF").opacity(0.045)
+                var x: CGFloat = 17
+                while x < size.width {
+                    var y: CGFloat = 17
+                    while y < size.height {
+                        ctx.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1.5, height: 1.5)), with: .color(dotColor))
+                        y += spacing
+                    }
+                    x += spacing
+                }
+            }
         }
         .drawingGroup()
         .allowsHitTesting(false)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.55), value: module)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.50), value: module)
         .ignoresSafeArea()
     }
 }

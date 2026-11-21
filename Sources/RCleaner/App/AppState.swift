@@ -14,6 +14,7 @@ public final class AppState: ObservableObject {
     public let spaceLensService = SpaceLensService()
     public let cloudEmailService = CloudAndEmailService()
     public let assistantService = AssistantService()
+    public let voiceService = VoiceAssistantService()
 
     // Navigation & Global UI
     @Published public var selectedModule: RCleanerModule = .smartCare
@@ -224,6 +225,41 @@ public final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Built-in Jarvis Voice AI Helpers
+
+    public func speak(_ line: String, interrupt: Bool = true) {
+        voiceService.speak(line, settings: settings, interrupt: interrupt)
+    }
+
+    public func speakIntroGreeting() {
+        let greeting = VoiceAssistantService.timeOfDayGreeting(address: settings.voiceAddressTitle)
+        speak(greeting)
+    }
+
+    public func speakSystemBriefing() {
+        if voiceService.isSpeaking {
+            voiceService.stop()
+            return
+        }
+        let line = VoiceAssistantService.systemBriefing(
+            telemetry: telemetry,
+            healthScore: healthScore,
+            address: settings.voiceAddressTitle
+        )
+        speak(line)
+    }
+
+    public func toggleVoiceAssistant() {
+        settings.enableVoiceAssistant.toggle()
+        if !settings.enableVoiceAssistant {
+            voiceService.stop()
+            showBanner("Voice AI muted")
+        } else {
+            showBanner("Voice AI online")
+            speak("Voice interface online, \(settings.voiceAddressTitle).")
+        }
+    }
+
     public func completeIntro(startSmartCare: Bool) {
         settings.hasCompletedIntro = true
         withAnimation(.easeInOut(duration: 0.42)) {
@@ -245,6 +281,7 @@ public final class AppState: ObservableObject {
 
     public func quickFreeUpRAM() {
         let service = performanceService
+        speak("Optimizing system memory now, \(settings.voiceAddressTitle).")
         Task.detached(priority: .userInitiated) {
             let (_, msg) = service.executeSingleTask(.freeUpRAM)
             await MainActor.run {
@@ -252,6 +289,7 @@ public final class AppState: ObservableObject {
                 self.stats.totalTimeSavedMinutes += 3
                 self.refreshTelemetry(includeHeavy: true)
                 self.showBanner(msg)
+                self.speak("Memory optimization complete.")
             }
         }
     }
@@ -303,6 +341,7 @@ public final class AppState: ObservableObject {
 
     public func launchScreenCleaningMode() {
         isScreenCleaningActive = true
+        speak("Screen cleaning mode engaged. Press Escape when finished.")
         ScreenCleaningWindowController.shared.present(
             onComplete: { [weak self] in
                 Task { @MainActor in
@@ -331,6 +370,7 @@ public final class AppState: ObservableObject {
         smartCareStage = .scanning
         smartCareProgress = 0.05
         smartCareStatusText = "Starting Smart Care checkup..."
+        speak("Initiating full system diagnostics across storage, security, performance, and applications.")
 
         let currentSettings = settings
         let currentTelemetry = telemetry
@@ -458,6 +498,14 @@ public final class AppState: ObservableObject {
             self.smartCareStage = .resultsOverview
             self.stats.lastSmartCareDate = Date()
             FileSystemHelpers.playCompletionSound(enabled: self.settings.playSounds)
+            let totalJunk = self.cleanupCategories.reduce(0) { $0 + $1.selectedBytes }
+            let threats = self.protectionResult.threats.count
+            let addr = self.settings.voiceAddressTitle.isEmpty ? "" : ", \(self.settings.voiceAddressTitle)"
+            if threats > 0 {
+                self.speak("Diagnostics complete\(addr). Alert: \(threats) potential threats detected and \(ByteFormat.string(totalJunk)) of junk ready for removal.")
+            } else {
+                self.speak("Diagnostics complete\(addr). No threats detected, and \(ByteFormat.string(totalJunk)) of junk is ready to clear.")
+            }
         }
     }
 
@@ -536,6 +584,8 @@ public final class AppState: ObservableObject {
             smartCareStage = .complete
             refreshTelemetry(includeHeavy: true)
             FileSystemHelpers.playCompletionSound(enabled: settings.playSounds)
+            let addr = settings.voiceAddressTitle.isEmpty ? "" : ", \(settings.voiceAddressTitle)"
+            speak("Optimization complete\(addr). Reclaimed \(ByteFormat.string(totalFreed)) of storage. Your Mac is operating at peak efficiency.")
         }
     }
 

@@ -93,6 +93,13 @@ public struct RCleanerSettings: Codable, Equatable {
     public var enableSmartInsights: Bool = true
     public var checkUpdatesAutomatically: Bool = true
 
+    // Voice AI System (Built-in macOS TTS)
+    public var enableVoiceAssistant: Bool = true
+    public var voiceIdentifier: String = ""
+    public var voiceRate: Double = 0.49
+    public var voicePitch: Double = 0.92
+    public var voiceAddressTitle: String = "sir"
+
     // Smart Care Modules Enabled
     public var smartCareCleanupEnabled: Bool = true
     public var smartCareProtectionEnabled: Bool = true

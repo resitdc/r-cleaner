@@ -593,7 +593,9 @@ public struct IntroFlowView: View {
             withAnimation(.spring(response: 0.65, dampingFraction: 0.82)) {
                 textReveal = true
             }
-            if appState.settings.playSounds {
+            if appState.settings.enableVoiceAssistant {
+                appState.speakIntroGreeting()
+            } else if appState.settings.playSounds {
                 NSSound(named: NSSound.Name("Purr"))?.play()
             }
         }

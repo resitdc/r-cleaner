@@ -32,7 +32,14 @@ public struct GlassCard<Content: View>: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                             .strokeBorder(
-                                highlightColor?.opacity(0.45) ?? RCleanerTheme.cardBorder,
+                                LinearGradient(
+                                    colors: [
+                                        highlightColor?.opacity(0.65) ?? (isHovered ? RCleanerTheme.cardBorderAccent : Color.white.opacity(0.16)),
+                                        Color.white.opacity(0.05)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
                                 lineWidth: 1
                             )
                     )

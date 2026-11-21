@@ -13,6 +13,8 @@ public struct SettingsView: View {
             TabView {
                 generalTab
                     .tabItem { Label("General", systemImage: "gearshape") }
+                voiceAITab
+                    .tabItem { Label("Voice AI", systemImage: "waveform") }
                 scanningTab
                     .tabItem { Label("Scanning", systemImage: "magnifyingglass.circle") }
                 protectionTab
@@ -79,6 +81,62 @@ public struct SettingsView: View {
                     }
                     Spacer()
                     Button("Open Settings") { FileSystemHelpers.openPrivacySettings(pane: "Privacy_Accessibility") }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var voiceAITab: some View {
+        Form {
+            Section("Stark-Style Voice System (Built-in macOS TTS)") {
+                Toggle("Enable Voice AI Assistant", isOn: $appState.settings.enableVoiceAssistant)
+
+                TextField("Address me as (e.g., sir, boss, your name)", text: $appState.settings.voiceAddressTitle)
+
+                Picker("Voice", selection: $appState.settings.voiceIdentifier) {
+                    Text("Auto (Best British Male — Daniel en-GB)").tag("")
+                    ForEach(appState.voiceService.availableVoices) { v in
+                        Text("\(v.name) (\(v.language) • \(v.qualityLabel))").tag(v.id)
+                    }
+                }
+
+                VStack(alignment: .leading) {
+                    HStack {
+                        Text("Speech Cadence (Rate)")
+                        Spacer()
+                        Text(String(format: "%.2f", appState.settings.voiceRate)).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    Slider(value: $appState.settings.voiceRate, in: 0.38...0.58)
+                }
+
+                VStack(alignment: .leading) {
+                    HStack {
+                        Text("Vocal Pitch (Lower = Deeper)")
+                        Spacer()
+                        Text(String(format: "%.2f", appState.settings.voicePitch)).monospacedDigit().foregroundStyle(.secondary)
+                    }
+                    Slider(value: $appState.settings.voicePitch, in: 0.80...1.15)
+                }
+
+                HStack {
+                    Button("Test Voice Briefing") {
+                        appState.speakSystemBriefing()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("Stop Speaking") {
+                        appState.voiceService.stop()
+                    }
+                    .disabled(!appState.voiceService.isSpeaking)
+
+                    Spacer()
+
+                    Button("Install Enhanced Voices...") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.Accessibility-Settings.extension") {
+                            NSWorkspace.shared.open(url)
+                        }
+                    }
                 }
             }
         }
