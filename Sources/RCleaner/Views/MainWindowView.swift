@@ -1,7 +1,9 @@
 import SwiftUI
+import AppKit
 
 public struct MainWindowView: View {
     @EnvironmentObject var appState: AppState
+    @State private var isBrandHovered = false
 
     public init() {}
 
@@ -70,22 +72,58 @@ public struct MainWindowView: View {
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // App Brand Header with frameless resitdc.svg Logo
-            HStack(spacing: 10) {
-                ResitdcLogoMark(height: 24, glow: true)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("R-Cleaner")
-                        .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text("by resitdc")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color(hex: "19F8FF").opacity(0.8))
+            // App Brand Header with frameless resitdc.svg Logo (clickable -> https://resitdc.id)
+            Button {
+                if let url = URL(string: "https://resitdc.id") {
+                    NSWorkspace.shared.open(url)
                 }
-                Spacer()
+            } label: {
+                HStack(spacing: 10) {
+                    ResitdcLogoMark(height: 24, glow: true)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("R-Cleaner")
+                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                        HStack(spacing: 3) {
+                            Text("by resitdc")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundStyle(Color(hex: "19F8FF").opacity(isBrandHovered ? 1.0 : 0.8))
+                            Image(systemName: "arrow.up.right")
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(Color(hex: "19F8FF").opacity(isBrandHovered ? 0.95 : 0.0))
+                        }
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 11, style: .continuous)
+                        .fill(isBrandHovered ? Color.white.opacity(0.09) : Color.clear)
+                )
+                .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 16)
-            .padding(.bottom, 14)
+            .buttonStyle(.plain)
+            .onHover { hovering in
+                withAnimation(.easeOut(duration: 0.15)) {
+                    isBrandHovered = hovering
+                }
+                if hovering {
+                    NSCursor.pointingHand.push()
+                } else {
+                    NSCursor.pop()
+                }
+            }
+            .onDisappear {
+                if isBrandHovered {
+                    NSCursor.pop()
+                    isBrandHovered = false
+                }
+            }
+            .help("Visit https://resitdc.id")
+            .padding(.horizontal, 8)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
 
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 3) {
