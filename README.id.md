@@ -37,13 +37,20 @@
 3. Klik ganda file `.dmg`, lalu seret (*drag*) **R-Cleaner** ke folder **Applications**.
 4. Buka **R-Cleaner** dari folder **Applications** atau lewat Spotlight (`⌘ Space`).
 
-> **Catatan saat membuka pertama kali (macOS Gatekeeper):**  
-> Jika build rilis menggunakan *ad-hoc signing* (tanpa sertifikat Apple Developer ID berbayar), macOS mungkin menampilkan peringatan keamanan saat pertama kali dibuka. Cara membukanya:
-> - **Cara 1:** Klik kanan `R-Cleaner.app` di folder Applications → pilih **Open** → klik **Open** lagi.
-> - **Cara 2:** Jalankan perintah berikut di Terminal:
->   ```bash
->   xattr -cr /Applications/R-Cleaner.app
->   ```
+> [!WARNING]
+> **Peringatan Saat Membuka Pertama Kali (macOS Gatekeeper / "Apple could not verify R-Cleaner"):**  
+> Karena R-Cleaner bersifat open-source dan menggunakan *ad-hoc signing* (tanpa sertifikat berbayar Apple Developer ID), macOS akan memblokir aplikasi saat pertama kali dibuka. Cara menyetujui dan membukanya dengan aman:
+>
+> **Cara 1 — Lewat System Settings (Disarankan di macOS 15 Sequoia ke atas):**
+> 1. Coba buka **R-Cleaner** dari folder **Applications** sekali, lalu klik **Done** (atau **OK**) pada pop-up peringatan macOS.
+> 2. Buka **System Settings** (Pengaturan Sistem) → **Privacy & Security** (Privasi & Keamanan).
+> 3. **Scroll ke bawah** ke bagian **Security** — akan muncul pesan *"R-Cleaner was blocked to protect your Mac"*.
+> 4. Klik **Open Anyway** (Tetap Buka), masukkan kata sandi Mac / Touch ID Anda, lalu konfirmasi **Open Anyway**.
+>
+> **Cara 2 — Satu Baris Perintah Terminal:**
+> ```bash
+> xattr -cr /Applications/R-Cleaner.app
+> ```
 
 ### Izin macOS yang Disarankan (Opsional)
 Agar pemindaian berjalan maksimal, Anda dapat mengaktifkan izin melalui **Settings → General → macOS System Permissions** di dalam R-Cleaner:

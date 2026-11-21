@@ -124,10 +124,11 @@ jobs:
             2. Open the `.dmg` and drag **R-Cleaner** into your **Applications** folder.
             3. Launch **R-Cleaner** from Applications (requires macOS 14.0 Sonoma or later).
 
-            > **Note (Ad-hoc signed builds):** If macOS Gatekeeper warns that the developer cannot be verified, right-click `R-Cleaner.app` → **Open**, or run:
-            > ```bash
-            > xattr -cr /Applications/R-Cleaner.app
-            > ```
+            > [!WARNING]
+            > **First-Time Launch (macOS Gatekeeper):** Because builds without a paid Apple Developer ID are ad-hoc signed, macOS will block the app on first launch. To open it:
+            > 1. Try opening **R-Cleaner** once and click **Done** on the warning popup.
+            > 2. Go to **System Settings → Privacy & Security**, scroll down to **Security**, and click **Open Anyway**.
+            > 3. Or run in Terminal: `xattr -cr /Applications/R-Cleaner.app`
           files: |
             dist/R-Cleaner-${{ steps.version.outputs.version }}-universal.dmg
             dist/R-Cleaner-${{ steps.version.outputs.version }}-universal.app.zip

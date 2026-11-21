@@ -37,13 +37,20 @@
 3. Double-click the `.dmg` file and drag **R-Cleaner** into your **Applications** folder.
 4. Open **R-Cleaner** from **Applications** or Spotlight (`⌘ Space`).
 
-> **First-time launch note (macOS Gatekeeper):**  
-> Because release builds without an Apple Developer ID certificate are ad-hoc signed, macOS may show a warning on first launch. To open safely:
-> - **Option A:** Right-click `R-Cleaner.app` in Applications → click **Open** → click **Open** again.
-> - **Option B:** Run in Terminal:
->   ```bash
->   xattr -cr /Applications/R-Cleaner.app
->   ```
+> [!WARNING]
+> **First-Time Launch Warning (macOS Gatekeeper / "Apple could not verify R-Cleaner"):**  
+> Because R-Cleaner is open-source and ad-hoc signed (without a paid Apple Developer ID notarization certificate), macOS will block the app the first time you open it. To approve and launch it safely:
+>
+> **Option A — System Settings (Recommended on macOS 15 Sequoia & newer):**
+> 1. Try opening **R-Cleaner** from **Applications** once, then click **Done** (or **OK**) on the macOS warning dialog.
+> 2. Open **System Settings** → **Privacy & Security**.
+> 3. Scroll down to the **Security** section — you will see *"R-Cleaner was blocked to protect your Mac"*.
+> 4. Click **Open Anyway**, enter your Mac password / Touch ID, and confirm **Open Anyway**.
+>
+> **Option B — One-Line Terminal Command:**
+> ```bash
+> xattr -cr /Applications/R-Cleaner.app
+> ```
 
 ### Recommended macOS Permissions (Optional)
 For complete scanning capabilities, you can grant permissions from **Settings → General → macOS System Permissions** inside R-Cleaner:
