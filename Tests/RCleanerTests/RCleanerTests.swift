@@ -133,6 +133,29 @@ final class RCleanerTests: XCTestCase {
         XCTAssertEqual(root.itemCount, 3)
         XCTAssertEqual(ByteFormat.itemCount(2_763_088), "2M items")
         XCTAssertEqual(ByteFormat.itemCount(4_354_232), "4M items")
+
+        // Verify tangential bubble packing guarantees zero overlaps and full canvas containment
+        // even with two massive adjacent folders (e.g. 125 GB + 79 GB) plus smaller siblings
+        let canvas = CGSize(width: 620, height: 520)
+        let sampleSizes: [Int64] = [
+            125_000_000_000, 79_100_000_000, 9_000_000_000, 6_400_000_000,
+            3_300_000_000, 2_200_000_000, 1_500_000_000, 800_000_000, 400_000_000
+        ]
+        let packed = SpaceLensBubblePacker.pack(sizes: sampleSizes, in: canvas)
+        XCTAssertEqual(packed.count, sampleSizes.count)
+
+        for i in 0..<packed.count {
+            let a = packed[i]
+            XCTAssertGreaterThanOrEqual(a.center.x - a.radius, 0, "Bubble \(i) clipped left")
+            XCTAssertLessThanOrEqual(a.center.x + a.radius, canvas.width, "Bubble \(i) clipped right")
+            XCTAssertGreaterThanOrEqual(a.center.y - a.radius, 0, "Bubble \(i) clipped top")
+            XCTAssertLessThanOrEqual(a.center.y + a.radius, canvas.height, "Bubble \(i) clipped bottom")
+            for j in (i + 1)..<packed.count {
+                let b = packed[j]
+                let dist = hypot(a.center.x - b.center.x, a.center.y - b.center.y)
+                XCTAssertGreaterThanOrEqual(dist, a.radius + b.radius - 0.5, "Bubbles \(i) and \(j) overlapped!")
+            }
+        }
     }
 
     func testDevAISweeperArtifactDetectionAndSafety() async throws {

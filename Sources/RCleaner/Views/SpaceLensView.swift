@@ -147,10 +147,10 @@ public struct SpaceLensView: View {
                 }
                 .frame(width: 340)
 
-                // Right Interactive Bubble Map
+                // Right Interactive Glass Bubble Map
                 GeometryReader { geo in
                     BubbleMapCanvas(
-                        nodes: Array(currentNode.children.prefix(14)),
+                        nodes: currentNode.children,
                         totalSize: max(1, currentNode.sizeBytes),
                         palette: palette,
                         size: geo.size
@@ -163,8 +163,8 @@ public struct SpaceLensView: View {
                         }
                     }
                 }
-                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white.opacity(0.05)))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.10), lineWidth: 1))
+                .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Color.white.opacity(0.035)))
+                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Color.white.opacity(0.09), lineWidth: 1))
             }
             .padding(.horizontal, 24)
             .padding(.vertical, 8)
@@ -357,8 +357,7 @@ private struct SpaceLensRow: View {
                 .labelsHidden()
                 .disabled(node.isCloudOnlyEvicted)
 
-            Image(systemName: node.isDirectory ? "folder.fill" : "doc.fill")
-                .foregroundStyle(node.isDirectory ? palette.accent : .white.opacity(0.7))
+            NativeFileIconView(path: node.path, isDirectory: node.isDirectory, size: 22)
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
@@ -401,6 +400,213 @@ private struct SpaceLensRow: View {
     }
 }
 
+// MARK: - Native macOS File/Folder Icon View (Cached)
+
+private final class SpaceLensIconCache {
+    static let shared = SpaceLensIconCache()
+    private let cache = NSCache<NSString, NSImage>()
+
+    private init() {
+        cache.countLimit = 256
+    }
+
+    func icon(forPath path: String, isDirectory: Bool) -> NSImage {
+        let key = (isDirectory ? "d:" : "f:") + path
+        if let cached = cache.object(forKey: key as NSString) {
+            return cached
+        }
+        let img = NSWorkspace.shared.icon(forFile: path)
+        img.size = NSSize(width: 128, height: 128)
+        cache.setObject(img, forKey: key as NSString)
+        return img
+    }
+}
+
+private struct NativeFileIconView: View {
+    let path: String
+    let isDirectory: Bool
+    let size: CGFloat
+
+    var body: some View {
+        Image(nsImage: SpaceLensIconCache.shared.icon(forPath: path, isDirectory: isDirectory))
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: size, height: size)
+    }
+}
+
+// MARK: - Non-Overlapping Tangential Circle Packer
+
+public struct PackedBubbleLayout: Equatable {
+    public let index: Int
+    public let center: CGPoint
+    public let radius: CGFloat
+}
+
+public enum SpaceLensBubblePacker {
+    /// Packs proportional bubbles tangentially into an organic, non-overlapping cluster
+    /// and scales + centers the entire cluster cleanly inside `canvasSize`.
+    public static func pack(sizes: [Int64], in canvasSize: CGSize, padding: CGFloat = 22) -> [PackedBubbleLayout] {
+        guard !sizes.isEmpty, canvasSize.width > 40, canvasSize.height > 40 else { return [] }
+        let largest = max(1.0, Double(sizes.max() ?? 1))
+
+        // Compute proportional virtual radii (area scales with byte size, with readable floor)
+        let virtualRadii: [CGFloat] = sizes.map { sz in
+            let ratio = sqrt(max(0, Double(sz)) / largest)
+            return CGFloat(max(24.0, ratio * 100.0))
+        }
+
+        let gap: CGFloat = 10.0
+        var placed: [(idx: Int, x: CGFloat, y: CGFloat, r: CGFloat)] = []
+        placed.reserveCapacity(sizes.count)
+
+        for (i, r) in virtualRadii.enumerated() {
+            if i == 0 {
+                placed.append((0, 0, 0, r))
+                continue
+            }
+            if i == 1 {
+                // Place second-largest bubble organically beside the largest
+                placed.append((1, placed[0].r + r + gap, 6, r))
+                continue
+            }
+
+            // Compute weighted cluster centroid so subsequent bubbles tuck neatly into valleys
+            var sumW: CGFloat = 0
+            var cx: CGFloat = 0
+            var cy: CGFloat = 0
+            for p in placed {
+                let w = p.r * p.r
+                cx += p.x * w
+                cy += p.y * w
+                sumW += w
+            }
+            if sumW > 0 {
+                cx /= sumW
+                cy /= sumW
+            }
+
+            var bestPoint: (x: CGFloat, y: CGFloat)? = nil
+            var bestScore: CGFloat = .greatestFiniteMagnitude
+
+            func evaluateCandidate(x: CGFloat, y: CGFloat) {
+                // Reject any overlap with existing bubbles
+                for ex in placed {
+                    let minDist = ex.r + r + gap - 0.5
+                    let dx = x - ex.x
+                    let dy = y - ex.y
+                    if dx * dx + dy * dy < minDist * minDist {
+                        return
+                    }
+                }
+                let distToCenter = hypot(x - cx, y - cy)
+                if distToCenter < bestScore {
+                    bestScore = distToCenter
+                    bestPoint = (x, y)
+                }
+            }
+
+            // Exact pair-tangent placement touching two existing bubbles
+            for aIdx in 0..<placed.count {
+                let a = placed[aIdx]
+                for bIdx in (aIdx + 1)..<placed.count {
+                    let b = placed[bIdx]
+                    let dx = b.x - a.x
+                    let dy = b.y - a.y
+                    let d = hypot(dx, dy)
+                    let da = a.r + r + gap
+                    let db = b.r + r + gap
+                    guard d > 0.001, d <= da + db, d >= abs(da - db) else { continue }
+
+                    let aDist = (da * da - db * db + d * d) / (2 * d)
+                    let hSq = max(0, da * da - aDist * aDist)
+                    let h = sqrt(hSq)
+                    let px = a.x + aDist * dx / d
+                    let py = a.y + aDist * dy / d
+                    let rx = -dy * (h / d)
+                    let ry = dx * (h / d)
+
+                    evaluateCandidate(x: px + rx, y: py + ry)
+                    evaluateCandidate(x: px - rx, y: py - ry)
+                }
+            }
+
+            // Fallback radial sweep around existing bubbles if no pair-tangent fit
+            if bestPoint == nil {
+                for anchor in placed {
+                    let dist = anchor.r + r + gap
+                    for step in 0..<24 {
+                        let angle = CGFloat(step) * (.pi * 2.0 / 24.0)
+                        evaluateCandidate(x: anchor.x + cos(angle) * dist, y: anchor.y + sin(angle) * dist)
+                    }
+                }
+            }
+
+            let chosen = bestPoint ?? (placed[0].x + placed[0].r + r + gap, 0)
+            placed.append((i, chosen.x, chosen.y, r))
+        }
+
+        // Compute tight bounding box of entire packed cluster
+        var minX = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude
+        var minY = CGFloat.greatestFiniteMagnitude
+        var maxY = -CGFloat.greatestFiniteMagnitude
+        for p in placed {
+            minX = min(minX, p.x - p.r)
+            maxX = max(maxX, p.x + p.r)
+            minY = min(minY, p.y - p.r)
+            maxY = max(maxY, p.y + p.r)
+        }
+
+        let clusterW = max(1, maxX - minX)
+        let clusterH = max(1, maxY - minY)
+        let availW = max(20, canvasSize.width - padding * 2)
+        let availH = max(20, canvasSize.height - padding * 2)
+
+        // Cap max scale when only 1 bubble exists so a single item stays tasteful
+        let maxSingleScale: CGFloat = placed.count == 1 ? (min(availW, availH) * 0.34 / max(1, placed[0].r)) : .greatestFiniteMagnitude
+        let scale = min(availW / clusterW, availH / clusterH, maxSingleScale)
+
+        let midX = (minX + maxX) / 2
+        let midY = (minY + maxY) / 2
+        let canvasCX = canvasSize.width / 2
+        let canvasCY = canvasSize.height / 2
+
+        return placed.map { p in
+            PackedBubbleLayout(
+                index: p.idx,
+                center: CGPoint(
+                    x: canvasCX + (p.x - midX) * scale,
+                    y: canvasCY + (p.y - midY) * scale
+                ),
+                radius: max(10, p.r * scale)
+            )
+        }
+    }
+}
+
+// MARK: - Translucent Glass Bubble Map Canvas
+
+private enum BubbleEntry: Identifiable {
+    case node(SpaceLensNode)
+    case otherItems(count: Int, totalBytes: Int64)
+
+    var id: String {
+        switch self {
+        case .node(let n): return n.id.uuidString
+        case .otherItems: return "other-items-cluster"
+        }
+    }
+
+    var sizeBytes: Int64 {
+        switch self {
+        case .node(let n): return n.sizeBytes
+        case .otherItems(_, let b): return b
+        }
+    }
+}
+
 private struct BubbleMapCanvas: View {
     let nodes: [SpaceLensNode]
     let totalSize: Int64
@@ -408,96 +614,186 @@ private struct BubbleMapCanvas: View {
     let size: CGSize
     let onTap: (SpaceLensNode) -> Void
 
+    private var displayEntries: [BubbleEntry] {
+        let maxIndividual = 8
+        if nodes.count > maxIndividual + 1 {
+            let head = nodes.prefix(maxIndividual).map { BubbleEntry.node($0) }
+            let tail = nodes.dropFirst(maxIndividual)
+            let tailBytes = tail.reduce(Int64(0)) { $0 + $1.sizeBytes }
+            return head + [.otherItems(count: tail.count, totalBytes: tailBytes)]
+        }
+        return nodes.map { BubbleEntry.node($0) }
+    }
+
     var body: some View {
-        let positions = layoutBubbles()
+        let entries = displayEntries
+        let packed = SpaceLensBubblePacker.pack(sizes: entries.map(\.sizeBytes), in: size)
+
         ZStack {
-            if nodes.isEmpty {
+            if entries.isEmpty {
                 Text("Empty folder").foregroundStyle(.white.opacity(0.5))
             } else {
-                ForEach(Array(positions.enumerated()), id: \.element.node.id) { idx, item in
-                    let gradColors: [Color] = idx % 3 == 0
-                        ? [palette.primary.opacity(0.85), palette.secondary.opacity(0.65)]
-                        : (idx % 3 == 1
-                           ? [palette.secondary.opacity(0.80), palette.accent.opacity(0.55)]
-                           : [palette.accent.opacity(0.75), palette.primary.opacity(0.55)])
-
-                    Button {
-                        onTap(item.node)
-                    } label: {
-                        ZStack {
-                            Circle()
-                                .fill(LinearGradient(colors: gradColors, startPoint: .topLeading, endPoint: .bottomTrailing))
-                                .overlay(
-                                    Circle().strokeBorder(
-                                        item.node.isSelected ? Color.white : Color.white.opacity(0.30),
-                                        lineWidth: item.node.isSelected ? 3 : 1.2
-                                    )
-                                )
-                                .shadow(color: palette.primary.opacity(0.35), radius: 10)
-
-                            VStack(spacing: 2) {
-                                Image(systemName: item.node.isDirectory ? "folder.fill" : "doc.fill")
-                                    .font(.system(size: max(11, item.radius * 0.24)))
-                                    .foregroundStyle(.white.opacity(0.9))
-                                if item.radius >= 34 {
-                                    Text(item.node.name)
-                                        .font(.system(size: min(13, max(9, item.radius * 0.17)), weight: .semibold))
-                                        .foregroundStyle(.white)
-                                        .lineLimit(1)
-                                        .frame(maxWidth: item.radius * 1.55)
-                                    Text(ByteFormat.string(item.node.sizeBytes))
-                                        .font(.system(size: min(11, max(8, item.radius * 0.14)), weight: .bold, design: .rounded))
-                                        .foregroundStyle(.white.opacity(0.85))
-                                }
-                            }
+                ForEach(packed, id: \.index) { layout in
+                    let entry = entries[layout.index]
+                    GlassStorageBubbleView(
+                        entry: entry,
+                        radius: layout.radius,
+                        palette: palette
+                    ) {
+                        if case .node(let n) = entry {
+                            onTap(n)
                         }
-                        .frame(width: item.radius * 2, height: item.radius * 2)
                     }
-                    .buttonStyle(.plain)
-                    .position(item.center)
-                    .help("\(item.node.name) — \(ByteFormat.string(item.node.sizeBytes))")
+                    .position(layout.center)
                 }
             }
+        }
+        .clipped()
+    }
+}
+
+private struct GlassStorageBubbleView: View {
+    let entry: BubbleEntry
+    let radius: CGFloat
+    let palette: ModulePalette
+    let action: () -> Void
+    @State private var isHovered = false
+
+    private var isSelected: Bool {
+        if case .node(let n) = entry { return n.isSelected }
+        return false
+    }
+
+    private var helpText: String {
+        switch entry {
+        case .node(let n):
+            return "\(n.name) — \(ByteFormat.string(n.sizeBytes))"
+        case .otherItems(let count, let bytes):
+            return "\(count) other items — \(ByteFormat.string(bytes))"
         }
     }
 
-    private func layoutBubbles() -> [(node: SpaceLensNode, center: CGPoint, radius: CGFloat)] {
-        guard !nodes.isEmpty, size.width > 40, size.height > 40 else { return [] }
-        let cx = size.width / 2
-        let cy = size.height / 2
-        let maxR = min(size.width, size.height) * 0.24
-        let minR: CGFloat = 24
-        let largest = max(1, Double(nodes[0].sizeBytes))
+    var body: some View {
+        let diameter = radius * 2
+        let rimColor = isSelected ? Color.white : palette.accent
 
-        var placed: [(node: SpaceLensNode, center: CGPoint, radius: CGFloat)] = []
-        for (i, node) in nodes.enumerated() {
-            let ratio = sqrt(Double(node.sizeBytes) / largest)
-            let r = max(minR, CGFloat(ratio) * maxR)
+        Button(action: action) {
+            ZStack {
+                // Translucent soap-bubble / luminous glass sphere fill (dark hollow core → glowing edge)
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            stops: [
+                                .init(color: palette.backgroundMid.opacity(isHovered ? 0.34 : 0.24), location: 0.0),
+                                .init(color: palette.secondary.opacity(isHovered ? 0.36 : 0.26), location: 0.56),
+                                .init(color: palette.primary.opacity(isHovered ? 0.62 : 0.48), location: 0.88),
+                                .init(color: rimColor.opacity(isHovered ? 0.78 : 0.62), location: 1.0)
+                            ],
+                            center: .center,
+                            startRadius: 0,
+                            endRadius: radius
+                        )
+                    )
+                    // Subtle inner upper specular sheen
+                    .overlay(
+                        Circle()
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(isHovered ? 0.22 : 0.14),
+                                        Color.clear,
+                                        palette.accent.opacity(0.10)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    )
+                    // Crisp luminous glass rim border
+                    .overlay(
+                        Circle()
+                            .strokeBorder(
+                                LinearGradient(
+                                    colors: [
+                                        Color.white.opacity(isSelected ? 0.95 : (isHovered ? 0.72 : 0.48)),
+                                        palette.accent.opacity(isHovered ? 0.62 : 0.36),
+                                        Color.white.opacity(isSelected ? 0.85 : 0.42)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                ),
+                                lineWidth: isSelected ? 2.8 : (isHovered ? 1.8 : 1.2)
+                            )
+                    )
+                    .shadow(color: palette.primary.opacity(isHovered ? 0.45 : 0.24), radius: isHovered ? 16 : 10)
 
-            if i == 0 {
-                placed.append((node, CGPoint(x: cx, y: cy), r))
-                continue
+                // Content inside bubble
+                bubbleContent
             }
-
-            // Spiral placement until non-overlapping
-            var foundPoint = CGPoint(x: cx, y: cy)
-            var angle: CGFloat = CGFloat(i) * 1.1
-            var dist: CGFloat = placed[0].radius + r + 8
-            for _ in 0..<240 {
-                let candidate = CGPoint(x: cx + cos(angle) * dist, y: cy + sin(angle) * dist)
-                let inBounds = candidate.x - r > 10 && candidate.x + r < size.width - 10 && candidate.y - r > 10 && candidate.y + r < size.height - 10
-                let overlaps = placed.contains { existing in
-                    hypot(existing.center.x - candidate.x, existing.center.y - candidate.y) < (existing.radius + r + 6)
-                }
-                if inBounds && !overlaps {
-                    foundPoint = candidate
-                    break
-                }
-                angle += 0.42
-                dist += 2.2
-            }
-            placed.append((node, foundPoint, r))
+            .frame(width: diameter, height: diameter)
+            .scaleEffect(isHovered ? 1.04 : 1.0)
+            .animation(.spring(response: 0.28, dampingFraction: 0.75), value: isHovered)
         }
-        return placed
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+        .help(helpText)
+    }
+
+    @ViewBuilder
+    private var bubbleContent: some View {
+        switch entry {
+        case .node(let node):
+            let iconSize: CGFloat = {
+                if radius >= 70 { return min(82, radius * 0.62) }
+                if radius >= 40 { return min(48, radius * 0.68) }
+                return max(20, radius * 0.86)
+            }()
+
+            VStack(spacing: radius >= 56 ? 5 : 2) {
+                NativeFileIconView(path: node.path, isDirectory: node.isDirectory, size: iconSize)
+                    .shadow(color: Color.black.opacity(0.28), radius: 6, y: 3)
+
+                if radius >= 36 {
+                    Text(node.name)
+                        .font(.system(size: min(14.5, max(10, radius * 0.145)), weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .frame(maxWidth: radius * 1.62)
+                }
+
+                if radius >= 54 {
+                    Text(ByteFormat.string(node.sizeBytes))
+                        .font(.system(size: min(13.5, max(10.5, radius * 0.135)), weight: .semibold, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.92))
+                }
+            }
+
+        case .otherItems(let count, let bytes):
+            VStack(spacing: 4) {
+                // Iconic grouped-bubbles glyph for "Other items"
+                ZStack {
+                    Circle()
+                        .fill(Color.white.opacity(0.32))
+                        .frame(width: max(12, radius * 0.42), height: max(12, radius * 0.42))
+                        .offset(x: radius * 0.08, y: radius * 0.06)
+                    Circle()
+                        .fill(Color.white.opacity(0.55))
+                        .frame(width: max(5, radius * 0.16), height: max(5, radius * 0.16))
+                        .offset(x: -radius * 0.20, y: -radius * 0.18)
+                }
+                if radius >= 44 {
+                    Text("Other items")
+                        .font(.system(size: min(12, max(9.5, radius * 0.15)), weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.88))
+                        .lineLimit(1)
+                }
+                if radius >= 58 {
+                    Text("\(count) • \(ByteFormat.string(bytes))")
+                        .font(.system(size: 10.5, weight: .medium).monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.75))
+                }
+            }
+        }
     }
 }
