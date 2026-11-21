@@ -513,15 +513,58 @@ public struct ModuleHeaderBar: View {
                         .padding(.vertical, 4)
                         .background(Capsule().fill(Color.white.opacity(0.08)))
                         .lineLimit(1)
+                        .truncationMode(.tail)
                 }
             }
 
-            Spacer(minLength: 295) // Keeps header clear of top-right Voice AI + Mic + Assistant pills
+            Spacer(minLength: 355) // Keeps header clear of top-right Update + Voice AI/Mic + Assistant pills
         }
         .padding(.leading, 24)
         .padding(.trailing, 18)
         .padding(.top, 14)
         .padding(.bottom, 8)
+    }
+}
+
+// MARK: - Cached Native macOS File / App / Folder Icon View
+
+public final class NativeIconCache {
+    public static let shared = NativeIconCache()
+    private let cache = NSCache<NSString, NSImage>()
+
+    private init() {
+        cache.countLimit = 400
+    }
+
+    public func icon(forPath path: String, isDirectory: Bool = false) -> NSImage {
+        let key = (isDirectory ? "d:" : "f:") + path
+        if let cached = cache.object(forKey: key as NSString) {
+            return cached
+        }
+        let img = NSWorkspace.shared.icon(forFile: path)
+        img.size = NSSize(width: 128, height: 128)
+        cache.setObject(img, forKey: key as NSString)
+        return img
+    }
+}
+
+public struct NativeFileIconView: View {
+    public let path: String
+    public let isDirectory: Bool
+    public let size: CGFloat
+
+    public init(path: String, isDirectory: Bool = false, size: CGFloat = 24) {
+        self.path = path
+        self.isDirectory = isDirectory
+        self.size = size
+    }
+
+    public var body: some View {
+        Image(nsImage: NativeIconCache.shared.icon(forPath: path, isDirectory: isDirectory))
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: size, height: size)
     }
 }
 

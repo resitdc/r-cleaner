@@ -84,19 +84,23 @@ public struct ApplicationsView: View {
             }
 
             HStack(spacing: 8) {
-                ForEach(AppsTab.allCases, id: \.self) { tab in
-                    Button { selectedTab = tab } label: {
-                        Text(tab.rawValue)
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 13)
-                            .padding(.vertical, 7)
-                            .background(Capsule().fill(selectedTab == tab ? palette.primary.opacity(0.85) : Color.white.opacity(0.10)))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(AppsTab.allCases, id: \.self) { tab in
+                            Button { selectedTab = tab } label: {
+                                Text(tab.rawValue)
+                                    .font(.system(size: 12, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .padding(.horizontal, 13)
+                                    .padding(.vertical, 7)
+                                    .background(Capsule().fill(selectedTab == tab ? palette.primary.opacity(0.85) : Color.white.opacity(0.10)))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
-                    .buttonStyle(.plain)
                 }
-
-                Spacer()
 
                 if selectedTab == .uninstaller {
                     HStack(spacing: 6) {
@@ -143,39 +147,47 @@ public struct ApplicationsView: View {
 
         return VStack(spacing: 8) {
             HStack(spacing: 8) {
-                ForEach(UninstallerFilter.allCases, id: \.self) { f in
-                    Button { filterKind = f } label: {
-                        Text(f.rawValue)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(filterKind == f ? .white : .white.opacity(0.7))
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
-                            .background(Capsule().fill(filterKind == f ? Color.white.opacity(0.22) : Color.white.opacity(0.06)))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(UninstallerFilter.allCases, id: \.self) { f in
+                            Button { filterKind = f } label: {
+                                Text(f.rawValue)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .foregroundStyle(filterKind == f ? .white : .white.opacity(0.7))
+                                    .lineLimit(1)
+                                    .fixedSize(horizontal: true, vertical: false)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(Capsule().fill(filterKind == f ? Color.white.opacity(0.22) : Color.white.opacity(0.06)))
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        Menu {
+                            Button("All Vendors") { vendorFilter = nil }
+                            Divider()
+                            ForEach(AppVendorGroup.allCases) { v in
+                                Button(v.rawValue) { vendorFilter = v }
+                            }
+                        } label: {
+                            Label(vendorFilter?.rawValue ?? "Vendor: All", systemImage: "building.2")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.85))
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Capsule().fill(vendorFilter != nil ? palette.primary.opacity(0.55) : Color.white.opacity(0.08)))
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
                     }
-                    .buttonStyle(.plain)
                 }
 
-                Menu {
-                    Button("All Vendors") { vendorFilter = nil }
-                    Divider()
-                    ForEach(AppVendorGroup.allCases) { v in
-                        Button(v.rawValue) { vendorFilter = v }
-                    }
-                } label: {
-                    Label(vendorFilter?.rawValue ?? "Vendor: All", systemImage: "building.2")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.85))
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(Capsule().fill(vendorFilter != nil ? palette.primary.opacity(0.55) : Color.white.opacity(0.08)))
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-
-                Spacer()
                 Text("\(filteredIndices.count) items")
                     .font(.system(size: 11))
                     .foregroundStyle(.white.opacity(0.6))
+                    .fixedSize()
             }
             .padding(.horizontal, 24)
 
@@ -190,9 +202,7 @@ public struct ApplicationsView: View {
                                     .toggleStyle(.checkbox)
                                     .labelsHidden()
 
-                                Image(nsImage: NSWorkspace.shared.icon(forFile: app.path))
-                                    .resizable()
-                                    .frame(width: 32, height: 32)
+                                NativeFileIconView(path: app.path, isDirectory: true, size: 32)
 
                                 VStack(alignment: .leading, spacing: 2) {
                                     HStack(spacing: 6) {

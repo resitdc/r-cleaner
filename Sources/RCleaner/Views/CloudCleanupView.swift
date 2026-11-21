@@ -31,18 +31,20 @@ public struct CloudCleanupView: View {
 
     private var cloudAccountsHubView: some View {
         VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Cloud Cleanup")
-                    .font(.system(size: 32, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                Text("Tidy up your cloud files across iCloud Drive, Google Drive, OneDrive, and Dropbox. Unsync locally cached files to reclaim Mac storage without deleting them from the cloud.")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.white.opacity(0.72))
-                    .frame(maxWidth: 680, alignment: .leading)
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Cloud Cleanup")
+                        .font(.system(size: 32, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                    Text("Tidy up your cloud files across iCloud Drive, Google Drive, OneDrive, and Dropbox. Unsync locally cached files to reclaim Mac storage without deleting them from the cloud.")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.white.opacity(0.72))
+                }
+                Spacer(minLength: 355) // Keeps header clear of top-right HUD pills
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 30)
-            .padding(.top, 24)
+            .padding(.top, 20)
             .padding(.bottom, 18)
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 320, maximum: 420), spacing: 16)], spacing: 16) {

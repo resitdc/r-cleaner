@@ -251,6 +251,7 @@ public final class VoiceCommandService: ObservableObject {
     @Published public var lastResultCard: VoiceCommandResultCard? = nil
 
     private var audioEngine: AVAudioEngine?
+    private var hasInstalledTap: Bool = false
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
@@ -297,7 +298,10 @@ public final class VoiceCommandService: ObservableObject {
         maxDurationTimer = nil
 
         if let engine = audioEngine {
-            engine.inputNode.removeTap(onBus: 0)
+            if hasInstalledTap {
+                engine.inputNode.removeTap(onBus: 0)
+                hasInstalledTap = false
+            }
             if engine.isRunning {
                 engine.stop()
             }
@@ -414,6 +418,7 @@ public final class VoiceCommandService: ObservableObject {
                 self.audioLevel = self.audioLevel * 0.55 + normalized * 0.45
             }
         }
+        hasInstalledTap = true
 
         do {
             engine.prepare()
@@ -425,6 +430,7 @@ public final class VoiceCommandService: ObservableObject {
                 : "Listening..."
         } catch {
             inputNode.removeTap(onBus: 0)
+            hasInstalledTap = false
             statusNote = "Could not start microphone: \(error.localizedDescription)"
             return
         }

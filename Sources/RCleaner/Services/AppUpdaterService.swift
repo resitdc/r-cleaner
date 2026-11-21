@@ -257,55 +257,31 @@ public final class AppUpdaterService: @unchecked Sendable {
         try fm.createDirectory(at: stagingDir, withIntermediateDirectories: true)
         let downloadedFile = stagingDir.appendingPathComponent(assetName)
 
-        // 1. Stream download with real-time progress
-        var req = URLRequest(url: downloadURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 120)
+        // 1. Native zero-copy OS streaming download via URLSessionDownloadDelegate (full wire speed)
+        var req = URLRequest(url: downloadURL, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 180)
         req.setValue("R-Cleaner/\(Self.currentAppVersion)", forHTTPHeaderField: "User-Agent")
 
-        let (bytesStream, response) = try await URLSession.shared.bytes(for: req)
-        guard let http = response as? HTTPURLResponse, (200...299).contains(http.statusCode) else {
-            throw UpdaterError.network("Failed to download \(assetName) from GitHub Releases.")
+        let expectedFallback = release.preferredAssetSizeBytes
+        let delegate = StreamingDownloadDelegate(
+            destinationURL: downloadedFile,
+            fallbackTotalBytes: expectedFallback,
+            onProgress: onProgress
+        )
+        let session = URLSession(configuration: .ephemeral, delegate: delegate, delegateQueue: nil)
+        defer { session.finishTasksAndInvalidate() }
+
+        let task = session.downloadTask(with: req)
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                delegate.continuation = cont
+                task.resume()
+            }
+        } onCancel: {
+            task.cancel()
         }
 
-        let expectedTotal = max(response.expectedContentLength, release.preferredAssetSizeBytes)
-        fm.createFile(atPath: downloadedFile.path, contents: nil)
-        let fh = try FileHandle(forWritingTo: downloadedFile)
-
-        var downloaded: Int64 = 0
-        var chunk = Data()
-        chunk.reserveCapacity(128 * 1024)
-        var lastReport = CFAbsoluteTimeGetCurrent()
-
-        do {
-            for try await byte in bytesStream {
-                if Task.isCancelled {
-                    try? fh.close()
-                    try? fm.removeItem(at: stagingDir)
-                    throw CancellationError()
-                }
-                chunk.append(byte)
-                if chunk.count >= 64 * 1024 {
-                    try fh.write(contentsOf: chunk)
-                    downloaded += Int64(chunk.count)
-                    chunk.removeAll(keepingCapacity: true)
-                    let now = CFAbsoluteTimeGetCurrent()
-                    if now - lastReport >= 0.08 {
-                        lastReport = now
-                        let pct = expectedTotal > 0 ? min(0.99, Double(downloaded) / Double(expectedTotal)) : 0.5
-                        onProgress(pct, downloaded, expectedTotal)
-                    }
-                }
-            }
-            if !chunk.isEmpty {
-                try fh.write(contentsOf: chunk)
-                downloaded += Int64(chunk.count)
-            }
-            try fh.close()
-        } catch {
-            try? fh.close()
-            try? fm.removeItem(at: stagingDir)
-            throw error
-        }
-        onProgress(1.0, downloaded, max(expectedTotal, downloaded))
+        let finalSize = (try? fm.attributesOfItem(atPath: downloadedFile.path)[.size] as? Int64) ?? expectedFallback
+        onProgress(1.0, finalSize, max(expectedFallback, finalSize))
 
         // 2. Cryptographic SHA-256 verification against SHA256SUMS.txt (when published)
         onVerifying()
@@ -456,6 +432,82 @@ public final class AppUpdaterService: @unchecked Sendable {
             case .network(let m), .invalidPayload(let m), .missingAsset(let m), .checksumMismatch(let m), .installFailed(let m):
                 return m
             }
+        }
+    }
+}
+
+/// Zero-copy `URLSessionDownloadDelegate` bridging OS-level download streaming to Swift async/await.
+private final class StreamingDownloadDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    let destinationURL: URL
+    let fallbackTotalBytes: Int64
+    let onProgress: @Sendable (Double, Int64, Int64) -> Void
+    private let lock = NSLock()
+    private var lastReport: CFAbsoluteTime = 0
+    private var finished = false
+    var continuation: CheckedContinuation<Void, Error>?
+
+    init(
+        destinationURL: URL,
+        fallbackTotalBytes: Int64,
+        onProgress: @escaping @Sendable (Double, Int64, Int64) -> Void
+    ) {
+        self.destinationURL = destinationURL
+        self.fallbackTotalBytes = fallbackTotalBytes
+        self.onProgress = onProgress
+    }
+
+    private func complete(with result: Result<Void, Error>) {
+        lock.lock()
+        guard !finished else { lock.unlock(); return }
+        finished = true
+        let cont = continuation
+        continuation = nil
+        lock.unlock()
+        cont?.resume(with: result)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        let now = CFAbsoluteTimeGetCurrent()
+        lock.lock()
+        let shouldSend = (now - lastReport >= 0.08)
+        if shouldSend { lastReport = now }
+        lock.unlock()
+        guard shouldSend else { return }
+
+        let total = totalBytesExpectedToWrite > 0 ? totalBytesExpectedToWrite : fallbackTotalBytes
+        let pct = total > 0 ? min(0.99, Double(totalBytesWritten) / Double(total)) : 0.5
+        onProgress(pct, totalBytesWritten, total)
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        if let http = downloadTask.response as? HTTPURLResponse, !(200...299).contains(http.statusCode) {
+            complete(with: .failure(AppUpdaterService.UpdaterError.network("Download failed with HTTP \(http.statusCode).")))
+            return
+        }
+        do {
+            let fm = FileManager.default
+            if fm.fileExists(atPath: destinationURL.path) {
+                try fm.removeItem(at: destinationURL)
+            }
+            try fm.moveItem(at: location, to: destinationURL)
+            complete(with: .success(()))
+        } catch {
+            complete(with: .failure(error))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let error else { return }
+        if (error as NSError).code == NSURLErrorCancelled {
+            complete(with: .failure(CancellationError()))
+        } else {
+            complete(with: .failure(AppUpdaterService.UpdaterError.network(error.localizedDescription)))
         }
     }
 }

@@ -55,7 +55,7 @@ public struct MyToolsView: View {
                             .font(.system(size: 13))
                             .foregroundStyle(.white.opacity(0.7))
                     }
-                    Spacer(minLength: 265) // Keeps title clear of top-right Voice AI + Assistant pills
+                    Spacer(minLength: 355) // Keeps title clear of top-right Update + Voice AI/Mic + Assistant pills
                 }
 
                 HStack(spacing: 8) {

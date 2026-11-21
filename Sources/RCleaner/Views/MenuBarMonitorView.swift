@@ -283,7 +283,10 @@ public struct MenuBarMonitorView: View {
                     subtitle: netSub,
                     actionTitle: t.network.isTestingSpeed ? "Testing..." : "Test Speed",
                     onAction: { appState.runNetworkSpeedTest() },
-                    onTap: { expandedCard = .network }
+                    onTap: {
+                        expandedCard = .network
+                        appState.refreshTelemetry(includeHeavy: true)
+                    }
                 )
             }
 
@@ -423,11 +426,13 @@ public struct MenuBarMonitorView: View {
                         Text(proc.name).font(.caption).lineLimit(1)
                         Spacer()
                         Text(ByteFormat.string(proc.memoryBytes)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                        Button("Quit") {
-                            _ = appState.telemetryService.terminateProcess(pid: proc.id)
-                            appState.refreshTelemetry(includeHeavy: true)
+                        if proc.id > 1 && proc.id != getpid() && proc.name != "kernel_task" && proc.name != "launchd" {
+                            Button("Quit") {
+                                _ = appState.telemetryService.terminateProcess(pid: proc.id)
+                                appState.refreshTelemetry(includeHeavy: true)
+                            }
+                            .controlSize(.mini)
                         }
-                        .controlSize(.mini)
                     }
                 }
 
@@ -471,11 +476,13 @@ public struct MenuBarMonitorView: View {
                         Text(proc.name).font(.caption).lineLimit(1)
                         Spacer()
                         Text(String(format: "%.1f%%", proc.cpuPercent)).font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                        Button("Quit") {
-                            _ = appState.telemetryService.terminateProcess(pid: proc.id)
-                            appState.refreshTelemetry(includeHeavy: true)
+                        if proc.id > 1 && proc.id != getpid() && proc.name != "kernel_task" && proc.name != "launchd" {
+                            Button("Quit") {
+                                _ = appState.telemetryService.terminateProcess(pid: proc.id)
+                                appState.refreshTelemetry(includeHeavy: true)
+                            }
+                            .controlSize(.mini)
                         }
-                        .controlSize(.mini)
                     }
                 }
 
@@ -561,11 +568,13 @@ public struct MenuBarMonitorView: View {
                                     .font(.system(size: 10, weight: .semibold).monospacedDigit())
                                     .foregroundStyle(Color(hex: "FFB703"))
                             }
-                            Button("Quit") {
-                                _ = appState.telemetryService.terminateProcess(pid: proc.id)
-                                appState.refreshTelemetry(includeHeavy: true)
+                            if proc.id > 1 && proc.id != getpid() && proc.name != "kernel_task" && proc.name != "launchd" {
+                                Button("Quit") {
+                                    _ = appState.telemetryService.terminateProcess(pid: proc.id)
+                                    appState.refreshTelemetry(includeHeavy: true)
+                                }
+                                .controlSize(.mini)
                             }
-                            .controlSize(.mini)
                         }
                         .padding(.vertical, 2)
                     }

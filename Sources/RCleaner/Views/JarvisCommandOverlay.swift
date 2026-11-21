@@ -198,17 +198,19 @@ public struct JarvisCommandOverlay: View {
                                              : ByteFormat.string(proc.memoryBytes))
                                             .font(.system(size: 11.5, weight: .bold, design: .monospaced))
                                             .foregroundStyle(Color(hex: "5EFCE8"))
-                                        Button("Quit") {
-                                            let ok = appState.telemetryService.terminateProcess(pid: proc.id)
-                                            appState.showBanner(ok ? "Quit \(proc.name)" : "Could not terminate \(proc.name)")
-                                            appState.refreshTelemetry(includeHeavy: true)
+                                        if proc.id > 1 && proc.id != getpid() && proc.name != "kernel_task" && proc.name != "launchd" {
+                                            Button("Quit") {
+                                                let ok = appState.telemetryService.terminateProcess(pid: proc.id)
+                                                appState.showBanner(ok ? "Quit \(proc.name)" : "Could not terminate \(proc.name)")
+                                                appState.refreshTelemetry(includeHeavy: true)
+                                            }
+                                            .font(.system(size: 10.5, weight: .bold))
+                                            .foregroundStyle(.white)
+                                            .padding(.horizontal, 8)
+                                            .padding(.vertical, 3)
+                                            .background(Capsule().fill(Color(hex: "FF5E57").opacity(0.75)))
+                                            .buttonStyle(.plain)
                                         }
-                                        .font(.system(size: 10.5, weight: .bold))
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(Capsule().fill(Color(hex: "FF5E57").opacity(0.75)))
-                                        .buttonStyle(.plain)
                                     }
                                     .padding(.horizontal, 10)
                                     .padding(.vertical, 6)

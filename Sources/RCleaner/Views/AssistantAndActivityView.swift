@@ -116,13 +116,16 @@ public struct MyActivityDashboardView: View {
 
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("My Activity")
-                        .font(.system(size: 32, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text("From \(df.string(from: stats.firstUsedDate))")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.65))
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("My Activity")
+                            .font(.system(size: 32, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                        Text("From \(df.string(from: stats.firstUsedDate))")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.white.opacity(0.65))
+                    }
+                    Spacer(minLength: 355) // Keeps header clear of top-right HUD pills
                 }
 
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 16), GridItem(.flexible(), spacing: 16)], spacing: 16) {

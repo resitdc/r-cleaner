@@ -69,34 +69,39 @@ public struct PerformanceView: View {
             }
 
             HStack(spacing: 10) {
-                ForEach(PerfTab.allCases, id: \.self) { tab in
-                    let count: Int = {
-                        switch tab {
-                        case .maintenance: return appState.performanceResult.maintenanceTasks.count
-                        case .loginItems: return appState.performanceResult.loginItems.count
-                        case .backgroundItems: return appState.performanceResult.backgroundItems.count
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(PerfTab.allCases, id: \.self) { tab in
+                            let count: Int = {
+                                switch tab {
+                                case .maintenance: return appState.performanceResult.maintenanceTasks.count
+                                case .loginItems: return appState.performanceResult.loginItems.count
+                                case .backgroundItems: return appState.performanceResult.backgroundItems.count
+                                }
+                            }()
+                            Button {
+                                selectedTab = tab
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Text(tab.rawValue)
+                                    Text("\(count)")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .padding(.horizontal, 6)
+                                        .padding(.vertical, 2)
+                                        .background(Capsule().fill(Color.white.opacity(0.16)))
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 7)
+                                .background(Capsule().fill(selectedTab == tab ? palette.primary.opacity(0.8) : Color.white.opacity(0.10)))
+                            }
+                            .buttonStyle(.plain)
                         }
-                    }()
-                    Button {
-                        selectedTab = tab
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(tab.rawValue)
-                            Text("\(count)")
-                                .font(.system(size: 11, weight: .bold))
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(Color.white.opacity(0.16)))
-                        }
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(selectedTab == tab ? palette.primary.opacity(0.8) : Color.white.opacity(0.10)))
                     }
-                    .buttonStyle(.plain)
                 }
-                Spacer()
 
                 if selectedTab == .loginItems || selectedTab == .backgroundItems {
                     Button("Open Login Items Settings") {
@@ -106,6 +111,8 @@ public struct PerformanceView: View {
                     }
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)
                     .background(Capsule().fill(Color.white.opacity(0.12)))

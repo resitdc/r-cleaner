@@ -42,6 +42,8 @@ public final class DevAISweeperService: @unchecked Sendable {
             var isDir: ObjCBool = false
             guard fm.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue else { continue }
             let std = URL(fileURLWithPath: path).standardizedFileURL.resolvingSymlinksInPath().path
+            // Never walk protected OS root folders as a developer workspace
+            if FileSystemHelpers.isProtectedSystemPath(std) { continue }
             if seen.insert(std).inserted {
                 resolved.append(std)
             }

@@ -40,6 +40,7 @@ public final class AppState: ObservableObject {
             guard settings != oldValue else { return }
             assistantService.saveSettings(settings)
             refreshHealthScore()
+            evaluateSmartGuardAlerts(snapshot: telemetry)
         }
     }
     @Published public var stats: ActivityStatistics {
@@ -178,6 +179,7 @@ public final class AppState: ObservableObject {
     public func checkForUpdates(userInitiated: Bool) {
         updateTask?.cancel()
         if userInitiated {
+            NSApp.activate(ignoringOtherApps: true)
             showUpdateSheet = true
             updateState = .checking
         }
@@ -1167,6 +1169,10 @@ public final class AppState: ObservableObject {
 
     public func addDevWorkspaceFolder(_ path: String) {
         let std = URL(fileURLWithPath: path).standardizedFileURL.path
+        guard !FileSystemHelpers.isProtectedSystemPath(std) else {
+            showBanner("Please pick a project subfolder rather than a protected root directory.")
+            return
+        }
         if !settings.devCustomWorkspacePaths.contains(std) {
             settings.devCustomWorkspacePaths.append(std)
             showBanner("Added workspace: \(URL(fileURLWithPath: std).lastPathComponent)")

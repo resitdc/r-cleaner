@@ -4,6 +4,7 @@ import AppKit
 public struct SpaceLensView: View {
     @EnvironmentObject var appState: AppState
     @State private var navigationStack: [SpaceLensNode] = []
+    @State private var expandingNodeID: UUID? = nil
     @State private var showReviewSheet = false
     @State private var showCloudDeleteAlert = false
     @State private var showPurgeablePopover = false
@@ -105,6 +106,8 @@ public struct SpaceLensView: View {
                     }
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 4)
                     .background(Capsule().fill(Color.white.opacity(0.14)))
@@ -119,6 +122,8 @@ public struct SpaceLensView: View {
                         }
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 4)
                         .background(Capsule().fill(idx == navigationStack.count - 1 ? palette.primary.opacity(0.75) : Color.white.opacity(0.10)))
@@ -134,14 +139,21 @@ public struct SpaceLensView: View {
                 // Left List
                 ScrollView {
                     LazyVStack(spacing: 6) {
-                        ForEach(currentNode.children.prefix(80)) { child in
+                        ForEach(currentNode.children.prefix(100)) { child in
                             SpaceLensRow(
                                 node: child,
                                 palette: palette,
+                                isExpanding: expandingNodeID == child.id,
                                 onSelectionChanged: { appState.objectWillChange.send() }
                             ) {
                                 drillInto(child)
                             }
+                        }
+                        if currentNode.children.count > 100 {
+                            Text("+ \(currentNode.children.count - 100) smaller items not shown")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.white.opacity(0.5))
+                                .padding(.vertical, 8)
                         }
                     }
                 }
@@ -153,7 +165,10 @@ public struct SpaceLensView: View {
                         nodes: currentNode.children,
                         totalSize: max(1, currentNode.sizeBytes),
                         palette: palette,
-                        size: geo.size
+                        size: geo.size,
+                        onTapOther: { count in
+                            appState.showBanner("Scroll the left panel to inspect all \(count) additional items")
+                        }
                     ) { tapped in
                         if tapped.isDirectory {
                             drillInto(tapped)
@@ -305,18 +320,22 @@ public struct SpaceLensView: View {
 
     private func drillInto(_ node: SpaceLensNode) {
         guard node.isDirectory else { return }
+        // Guard against duplicate navigation stack entries or rapid double-clicks during lazy expansion
+        guard navigationStack.last?.id != node.id else { return }
         if !node.children.isEmpty {
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                 navigationStack.append(node)
             }
             return
         }
-        // Lazily expand folders deeper than the initial materialized tree depth
+        guard expandingNodeID == nil else { return }
+        expandingNodeID = node.id
         let service = appState.spaceLensService
         Task {
             let loadedChildren = await service.expandNode(node, additionalDepth: 3)
+            expandingNodeID = nil
             node.children = loadedChildren
-            if !loadedChildren.isEmpty {
+            if !loadedChildren.isEmpty, navigationStack.last?.id != node.id {
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                     navigationStack.append(node)
                 }
@@ -341,6 +360,7 @@ public struct SpaceLensView: View {
 private struct SpaceLensRow: View {
     @ObservedObject var node: SpaceLensNode
     let palette: ModulePalette
+    let isExpanding: Bool
     let onSelectionChanged: () -> Void
     let onDrillDown: () -> Void
 
@@ -380,7 +400,11 @@ private struct SpaceLensRow: View {
                 .font(.system(size: 12, weight: .semibold).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.85))
 
-            if node.isDirectory && (!node.children.isEmpty || node.itemCount > 0) {
+            if isExpanding {
+                ProgressView()
+                    .controlSize(.mini)
+                    .tint(.white)
+            } else if node.isDirectory && (!node.children.isEmpty || node.itemCount > 0) {
                 Button(action: onDrillDown) {
                     Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))
                 }
@@ -397,42 +421,6 @@ private struct SpaceLensRow: View {
                 Button("Open Folder in Space Lens") { onDrillDown() }
             }
         }
-    }
-}
-
-// MARK: - Native macOS File/Folder Icon View (Cached)
-
-private final class SpaceLensIconCache {
-    static let shared = SpaceLensIconCache()
-    private let cache = NSCache<NSString, NSImage>()
-
-    private init() {
-        cache.countLimit = 256
-    }
-
-    func icon(forPath path: String, isDirectory: Bool) -> NSImage {
-        let key = (isDirectory ? "d:" : "f:") + path
-        if let cached = cache.object(forKey: key as NSString) {
-            return cached
-        }
-        let img = NSWorkspace.shared.icon(forFile: path)
-        img.size = NSSize(width: 128, height: 128)
-        cache.setObject(img, forKey: key as NSString)
-        return img
-    }
-}
-
-private struct NativeFileIconView: View {
-    let path: String
-    let isDirectory: Bool
-    let size: CGFloat
-
-    var body: some View {
-        Image(nsImage: SpaceLensIconCache.shared.icon(forPath: path, isDirectory: isDirectory))
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(contentMode: .fit)
-            .frame(width: size, height: size)
     }
 }
 
@@ -612,6 +600,7 @@ private struct BubbleMapCanvas: View {
     let totalSize: Int64
     let palette: ModulePalette
     let size: CGSize
+    let onTapOther: (Int) -> Void
     let onTap: (SpaceLensNode) -> Void
 
     private var displayEntries: [BubbleEntry] {
@@ -640,8 +629,11 @@ private struct BubbleMapCanvas: View {
                         radius: layout.radius,
                         palette: palette
                     ) {
-                        if case .node(let n) = entry {
+                        switch entry {
+                        case .node(let n):
                             onTap(n)
+                        case .otherItems(let count, _):
+                            onTapOther(count)
                         }
                     }
                     .position(layout.center)

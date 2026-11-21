@@ -60,44 +60,47 @@ public struct SmartCareView: View {
                     .lineLimit(1)
             }
 
-            // 5 Pillar Live Cards
-            HStack(spacing: 14) {
+            // 5 Pillar Live Cards (responsive so all 5 fit cleanly even at 1060px minimum window width)
+            HStack(spacing: 10) {
                 ForEach(appState.smartCarePillars) { pillar in
                     let pPal = RCleanerTheme.palette(for: pillar.targetModule)
-                    GlassCard(padding: 16, cornerRadius: 18, highlightColor: pillar.status == .scanning || pillar.status == .running ? pPal.primary : nil) {
-                        VStack(spacing: 12) {
+                    GlassCard(padding: 12, cornerRadius: 18, highlightColor: pillar.status == .scanning || pillar.status == .running ? pPal.primary : nil) {
+                        VStack(spacing: 10) {
                             ZStack {
                                 Circle()
                                     .fill(pPal.primary.opacity(0.20))
-                                    .frame(width: 52, height: 52)
+                                    .frame(width: 48, height: 48)
                                 if pillar.status == .scanning || pillar.status == .running {
                                     ProgressView()
                                         .controlSize(.small)
                                         .tint(.white)
                                 } else {
                                     Image(systemName: pillar.iconName)
-                                        .font(.system(size: 22))
+                                        .font(.system(size: 20))
                                         .foregroundStyle(pPal.accent)
                                 }
                             }
                             Text(pillar.title)
-                                .font(.system(size: 13, weight: .semibold))
+                                .font(.system(size: 12.5, weight: .semibold))
                                 .foregroundStyle(.white)
+                                .lineLimit(1)
                             Text(pillar.metricText)
-                                .font(.system(size: 15, weight: .bold, design: .rounded))
+                                .font(.system(size: 14, weight: .bold, design: .rounded))
                                 .foregroundStyle(pPal.accent)
                                 .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                             Text(pillar.subtitle)
-                                .font(.system(size: 11))
+                                .font(.system(size: 10.5))
                                 .foregroundStyle(.white.opacity(0.65))
                                 .multilineTextAlignment(.center)
                                 .lineLimit(2)
                         }
-                        .frame(width: 124, height: 148)
+                        .frame(maxWidth: .infinity, minHeight: 140, maxHeight: 140)
                     }
+                    .frame(minWidth: 112, maxWidth: 152)
                 }
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, 22)
 
             ProgressView(value: appState.smartCareProgress)
                 .tint(palette.accent)
