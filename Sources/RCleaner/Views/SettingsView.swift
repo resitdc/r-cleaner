@@ -89,12 +89,32 @@ public struct SettingsView: View {
 
     private var voiceAITab: some View {
         Form {
-            Section("Stark-Style Voice System (Built-in macOS TTS)") {
+            Section("Built-in Jarvis Voice Core (Included — No Download Needed)") {
                 Toggle("Enable Voice AI Assistant", isOn: $appState.settings.enableVoiceAssistant)
+                Toggle("Use Bundled Neural Jarvis Voice Pack (\(VoiceAssistantService.bundledClipCount) studio clips included)", isOn: $appState.settings.useBundledVoicePack)
+                Toggle("Enable Futuristic HUD Audio Processing & Chime", isOn: $appState.settings.enableVoiceHudEffects)
 
+                HStack {
+                    Button("Test Built-in Jarvis Voice") {
+                        appState.testBundledJarvisVoice()
+                    }
+                    .buttonStyle(.borderedProminent)
+
+                    Button("Speak Live Telemetry Briefing") {
+                        appState.speakSystemBriefing()
+                    }
+
+                    Button("Stop") {
+                        appState.voiceService.stop()
+                    }
+                    .disabled(!appState.voiceService.isSpeaking)
+                }
+            }
+
+            Section("Live Telemetry Speech (macOS Built-in TTS)") {
                 TextField("Address me as (e.g., sir, boss, your name)", text: $appState.settings.voiceAddressTitle)
 
-                Picker("Voice", selection: $appState.settings.voiceIdentifier) {
+                Picker("Dynamic Speech Voice", selection: $appState.settings.voiceIdentifier) {
                     Text("Auto (Best British Male — Daniel en-GB)").tag("")
                     ForEach(appState.voiceService.availableVoices) { v in
                         Text("\(v.name) (\(v.language) • \(v.qualityLabel))").tag(v.id)
@@ -117,26 +137,6 @@ public struct SettingsView: View {
                         Text(String(format: "%.2f", appState.settings.voicePitch)).monospacedDigit().foregroundStyle(.secondary)
                     }
                     Slider(value: $appState.settings.voicePitch, in: 0.80...1.15)
-                }
-
-                HStack {
-                    Button("Test Voice Briefing") {
-                        appState.speakSystemBriefing()
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button("Stop Speaking") {
-                        appState.voiceService.stop()
-                    }
-                    .disabled(!appState.voiceService.isSpeaking)
-
-                    Spacer()
-
-                    Button("Install Enhanced Voices...") {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.Accessibility-Settings.extension") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
                 }
             }
         }

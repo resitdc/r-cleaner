@@ -26,6 +26,17 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/${APP_NAME}"
 chmod +x "$APP_DIR/Contents/MacOS/${APP_NAME}"
 
+# Bundle built-in Jarvis Neural Voice Pack directly into Resources (zero user download required)
+if [[ -d "$ROOT_DIR/Sources/RCleaner/Resources/VoicePack" ]]; then
+    cp -R "$ROOT_DIR/Sources/RCleaner/Resources/VoicePack" "$APP_DIR/Contents/Resources/VoicePack"
+fi
+
+# Copy SwiftPM resource bundle if generated alongside the binary
+RESOURCE_BUNDLE="$(swift build -c "$CONFIG" --show-bin-path)/RCleaner_RCleaner.bundle"
+if [[ -d "$RESOURCE_BUNDLE" ]]; then
+    cp -R "$RESOURCE_BUNDLE" "$APP_DIR/Contents/Resources/"
+fi
+
 # Generate native AppIcon.icns
 ICONSET_DIR="$DIST_DIR/AppIcon.iconset"
 rm -rf "$ICONSET_DIR"

@@ -231,9 +231,14 @@ public final class AppState: ObservableObject {
         voiceService.speak(line, settings: settings, interrupt: interrupt)
     }
 
+    public func playVoiceCue(_ cue: VoiceCue, fallbackText: String? = nil, interrupt: Bool = true) {
+        voiceService.playCue(cue, settings: settings, fallbackText: fallbackText, interrupt: interrupt)
+    }
+
     public func speakIntroGreeting() {
-        let greeting = VoiceAssistantService.timeOfDayGreeting(address: settings.voiceAddressTitle)
-        speak(greeting)
+        let cue = VoiceCue.timeOfDayIntroCue()
+        let fallback = VoiceAssistantService.timeOfDayGreeting(address: settings.voiceAddressTitle)
+        playVoiceCue(cue, fallbackText: fallback)
     }
 
     public func speakSystemBriefing() {
@@ -249,6 +254,10 @@ public final class AppState: ObservableObject {
         speak(line)
     }
 
+    public func testBundledJarvisVoice() {
+        playVoiceCue(.voiceTest)
+    }
+
     public func toggleVoiceAssistant() {
         settings.enableVoiceAssistant.toggle()
         if !settings.enableVoiceAssistant {
@@ -256,7 +265,7 @@ public final class AppState: ObservableObject {
             showBanner("Voice AI muted")
         } else {
             showBanner("Voice AI online")
-            speak("Voice interface online, \(settings.voiceAddressTitle).")
+            playVoiceCue(.voiceTest)
         }
     }
 
@@ -281,7 +290,6 @@ public final class AppState: ObservableObject {
 
     public func quickFreeUpRAM() {
         let service = performanceService
-        speak("Optimizing system memory now, \(settings.voiceAddressTitle).")
         Task.detached(priority: .userInitiated) {
             let (_, msg) = service.executeSingleTask(.freeUpRAM)
             await MainActor.run {
@@ -289,7 +297,7 @@ public final class AppState: ObservableObject {
                 self.stats.totalTimeSavedMinutes += 3
                 self.refreshTelemetry(includeHeavy: true)
                 self.showBanner(msg)
-                self.speak("Memory optimization complete.")
+                self.playVoiceCue(.ramOptimized)
             }
         }
     }
@@ -341,12 +349,13 @@ public final class AppState: ObservableObject {
 
     public func launchScreenCleaningMode() {
         isScreenCleaningActive = true
-        speak("Screen cleaning mode engaged. Press Escape when finished.")
+        playVoiceCue(.screenCleanOn)
         ScreenCleaningWindowController.shared.present(
             onComplete: { [weak self] in
                 Task { @MainActor in
                     self?.isScreenCleaningActive = false
                     self?.stats.lastScreenCleanDate = Date()
+                    self?.playVoiceCue(.screenCleanOff)
                 }
             }
         )
@@ -370,7 +379,7 @@ public final class AppState: ObservableObject {
         smartCareStage = .scanning
         smartCareProgress = 0.05
         smartCareStatusText = "Starting Smart Care checkup..."
-        speak("Initiating full system diagnostics across storage, security, performance, and applications.")
+        playVoiceCue(.smartCareStart)
 
         let currentSettings = settings
         let currentTelemetry = telemetry
@@ -500,11 +509,10 @@ public final class AppState: ObservableObject {
             FileSystemHelpers.playCompletionSound(enabled: self.settings.playSounds)
             let totalJunk = self.cleanupCategories.reduce(0) { $0 + $1.selectedBytes }
             let threats = self.protectionResult.threats.count
-            let addr = self.settings.voiceAddressTitle.isEmpty ? "" : ", \(self.settings.voiceAddressTitle)"
-            if threats > 0 {
-                self.speak("Diagnostics complete\(addr). Alert: \(threats) potential threats detected and \(ByteFormat.string(totalJunk)) of junk ready for removal.")
+            if threats == 0 && totalJunk == 0 {
+                self.playVoiceCue(.smartCareClean)
             } else {
-                self.speak("Diagnostics complete\(addr). No threats detected, and \(ByteFormat.string(totalJunk)) of junk is ready to clear.")
+                self.playVoiceCue(.smartCareComplete)
             }
         }
     }
@@ -584,8 +592,7 @@ public final class AppState: ObservableObject {
             smartCareStage = .complete
             refreshTelemetry(includeHeavy: true)
             FileSystemHelpers.playCompletionSound(enabled: settings.playSounds)
-            let addr = settings.voiceAddressTitle.isEmpty ? "" : ", \(settings.voiceAddressTitle)"
-            speak("Optimization complete\(addr). Reclaimed \(ByteFormat.string(totalFreed)) of storage. Your Mac is operating at peak efficiency.")
+            playVoiceCue(.cleanupComplete)
         }
     }
 
@@ -620,6 +627,7 @@ public final class AppState: ObservableObject {
         cleanupFocusedCategory = focusedCategory
         cleanupStage = .scanning
         cleanupProgress = 0.05
+        playVoiceCue(.cleanupStart)
         let currentSettings = settings
 
         activeTask = Task {
@@ -656,6 +664,7 @@ public final class AppState: ObservableObject {
             self.cleanupStage = .complete
             self.refreshTelemetry(includeHeavy: true)
             FileSystemHelpers.playCompletionSound(enabled: self.settings.playSounds)
+            self.playVoiceCue(.cleanupComplete)
         }
     }
 
@@ -663,6 +672,7 @@ public final class AppState: ObservableObject {
         activeTask?.cancel()
         protectionStage = .scanning
         protectionProgress = 0.05
+        playVoiceCue(.protectionStart)
         let currentSettings = settings
 
         activeTask = Task {
@@ -678,6 +688,9 @@ public final class AppState: ObservableObject {
             self.stats.lastMalwareScanDate = Date()
             self.protectionStage = .resultsOverview
             FileSystemHelpers.playCompletionSound(enabled: self.settings.playSounds)
+            if res.threats.isEmpty {
+                self.playVoiceCue(.protectionClean)
+            }
         }
     }
 
@@ -720,6 +733,7 @@ public final class AppState: ObservableObject {
             self.performanceStage = .complete
             self.refreshTelemetry(includeHeavy: true)
             FileSystemHelpers.playCompletionSound(enabled: self.settings.playSounds)
+            self.playVoiceCue(.cleanupComplete)
         }
     }
 

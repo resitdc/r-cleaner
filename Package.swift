@@ -13,6 +13,9 @@ let package = Package(
         .executableTarget(
             name: "RCleaner",
             path: "Sources/RCleaner",
+            resources: [
+                .copy("Resources/VoicePack")
+            ],
             linkerSettings: [
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),

@@ -93,8 +93,10 @@ public struct RCleanerSettings: Codable, Equatable {
     public var enableSmartInsights: Bool = true
     public var checkUpdatesAutomatically: Bool = true
 
-    // Voice AI System (Built-in macOS TTS)
+    // Voice AI System (Bundled Neural Voice Pack + Built-in macOS TTS)
     public var enableVoiceAssistant: Bool = true
+    public var useBundledVoicePack: Bool = true
+    public var enableVoiceHudEffects: Bool = true
     public var voiceIdentifier: String = ""
     public var voiceRate: Double = 0.49
     public var voicePitch: Double = 0.92

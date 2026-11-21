@@ -115,5 +115,11 @@ final class RCleanerTests: XCTestCase {
         let briefing = VoiceAssistantService.systemBriefing(telemetry: snap, healthScore: 95, address: "sir")
         XCTAssertTrue(briefing.contains("95 percent"))
         XCTAssertTrue(briefing.contains("nominal"))
+
+        // Verify all 15 bundled Jarvis neural voice clips are included inside the app bundle
+        XCTAssertEqual(VoiceAssistantService.bundledClipCount, VoiceCue.allCases.count)
+        for cue in VoiceCue.allCases {
+            XCTAssertNotNil(VoiceAssistantService.bundledClipURL(for: cue), "Missing bundled voice clip: \(cue.rawValue).m4a")
+        }
     }
 }
