@@ -24,6 +24,7 @@
   </a>
   <img src="https://img.shields.io/badge/macOS-14.0%2B%20Universal%20(Apple%20Silicon%20%26%20Intel)-2ED573?style=flat-square&logo=apple" alt="macOS 14+ Universal" />
   <img src="https://img.shields.io/badge/Swift-5.10-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 5.10" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-38BDF8?style=flat-square" alt="MIT License" /></a>
 </p>
 
 </div>
@@ -133,3 +134,9 @@ open dist/R-Cleaner.app
 - **Release (`.github/workflows/release.yml`)**: Triggered automatically when pushing a version tag (e.g. `git tag v1.0.0 && git push origin v1.0.0`) or manually from the **Actions** tab. Publishes a GitHub Release with `R-Cleaner-<version>-universal.dmg`, `R-Cleaner-<version>-universal.app.zip`, and `SHA256SUMS.txt`.
   - Works out of the box with ad-hoc signing.
   - Optionally supports Apple Developer ID signing & notarization when these repository secrets are added: `MACOS_CERTIFICATE_P12` (base64 `.p12`), `MACOS_CERTIFICATE_PASSWORD`, `MACOS_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID`.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](LICENSE) — © 2026 [resitdc](https://resitdc.id).

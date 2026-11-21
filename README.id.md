@@ -24,6 +24,7 @@
   </a>
   <img src="https://img.shields.io/badge/macOS-14.0%2B%20Universal%20(Apple%20Silicon%20%26%20Intel)-2ED573?style=flat-square&logo=apple" alt="macOS 14+ Universal" />
   <img src="https://img.shields.io/badge/Swift-5.10-F05138?style=flat-square&logo=swift&logoColor=white" alt="Swift 5.10" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-38BDF8?style=flat-square" alt="MIT License" /></a>
 </p>
 
 </div>
@@ -133,3 +134,9 @@ open dist/R-Cleaner.app
 - **Release (`.github/workflows/release.yml`)**: Berjalan otomatis saat mendorong tag versi (contoh: `git tag v1.0.0 && git push origin v1.0.0`) atau secara manual dari tab **Actions**. Otomatis menerbitkan GitHub Release berisi `R-Cleaner-<versi>-universal.dmg`, `R-Cleaner-<versi>-universal.app.zip`, dan `SHA256SUMS.txt`.
   - Langsung berfungsi menggunakan *ad-hoc signing* tanpa konfigurasi tambahan.
   - Mendukung *code signing* & *notarization* Apple Developer ID secara opsional bila secrets berikut diisi di repositori: `MACOS_CERTIFICATE_P12` (base64 `.p12`), `MACOS_CERTIFICATE_PASSWORD`, `MACOS_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, dan `APPLE_TEAM_ID`.
+
+---
+
+## Lisensi
+
+Proyek ini dilisensikan di bawah [Lisensi MIT](LICENSE) — © 2026 [resitdc](https://resitdc.id).
