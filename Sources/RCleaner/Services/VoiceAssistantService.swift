@@ -30,35 +30,35 @@ public enum VoiceCue: String, CaseIterable {
     public var transcript: String {
         switch self {
         case .introMorning:
-            return "Good morning, sir. R-Cleaner systems are online and ready for diagnostics."
+            return "Good morning sir. R-Cleaner systems are online and ready for diagnostics."
         case .introAfternoon:
-            return "Good afternoon, sir. R-Cleaner systems are online and ready for diagnostics."
+            return "Good afternoon sir. R-Cleaner systems are online and ready for diagnostics."
         case .introEvening:
-            return "Good evening, sir. R-Cleaner systems are online and ready for diagnostics."
+            return "Good evening sir. R-Cleaner systems are online and ready for diagnostics."
         case .smartCareStart:
             return "Initiating full Smart Care diagnostics across all five subsystems."
         case .smartCareComplete:
-            return "Diagnostics complete. All scan results are ready for your review, sir."
+            return "Diagnostics complete. All scan results are ready for your review sir."
         case .smartCareClean:
-            return "All systems are already spotless, sir. No further action required."
+            return "All systems are already spotless sir. No further action required."
         case .cleanupStart:
             return "Scanning system caches, logs, and temporary files."
         case .cleanupComplete:
-            return "Cleanup complete, sir. Reclaimed storage is now available."
+            return "Cleanup complete sir. Reclaimed storage is now available."
         case .protectionStart:
             return "Running security diagnostics and privacy audit."
         case .protectionClean:
-            return "Security sweep complete. No active threats detected, sir."
+            return "Security sweep complete. No active threats detected sir."
         case .ramOptimized:
-            return "Memory buffers purged, sir. Free RAM has been optimized."
+            return "Memory buffers purged sir. Free RAM has been optimized."
         case .screenCleanOn:
             return "Screen cleaning mode engaged. Keyboard input is temporarily locked. Press Escape to resume."
         case .screenCleanOff:
-            return "Screen cleaning mode disengaged. Welcome back, sir."
+            return "Screen cleaning mode disengaged. Welcome back sir."
         case .briefingNominal:
-            return "All core subsystems are operating within nominal parameters, sir."
+            return "All core subsystems are operating within nominal parameters sir."
         case .voiceTest:
-            return "At your service, sir. R-Cleaner built-in neural voice core and HUD audio telemetry are fully operational."
+            return "At your service sir. R-Cleaner built-in neural voice core and HUD audio telemetry are fully operational."
         }
     }
 
@@ -367,12 +367,12 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
         case 12..<18: period = "Good afternoon"
         default: period = "Good evening"
         }
-        let suffix = address.trimmingCharacters(in: .whitespaces).isEmpty ? "" : ", \(address)"
+        let suffix = address.trimmingCharacters(in: .whitespaces).isEmpty ? "" : " \(address)"
         return "\(period)\(suffix). R-Cleaner systems are online and ready for diagnostics."
     }
 
     public static func systemBriefing(telemetry: SystemTelemetrySnapshot, healthScore: Int, address: String) -> String {
-        let suffix = address.trimmingCharacters(in: .whitespaces).isEmpty ? "" : ", \(address)"
+        let suffix = address.trimmingCharacters(in: .whitespaces).isEmpty ? "" : " \(address)"
         let freeSpace = ByteFormat.string(telemetry.storage.availableBytes)
         let ramAvail = ByteFormat.string(telemetry.memory.availableBytes)
         let cpuLoad = Int(telemetry.cpu.totalLoadPercent.rounded())
