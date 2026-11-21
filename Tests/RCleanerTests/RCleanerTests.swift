@@ -277,6 +277,29 @@ final class RCleanerTests: XCTestCase {
         XCTAssertTrue(release.supportsInPlaceInstall)
     }
 
+    func testJarvisVoiceCommandIntentParsing() {
+        XCTAssertEqual(VoiceCommandParser.parse("Hey Jarvis, run Smart Care"), .runSmartCare)
+        XCTAssertEqual(VoiceCommandParser.parse("Jarvis free up RAM"), .freeUpRAM)
+        XCTAssertEqual(VoiceCommandParser.parse("Flush DNS cache"), .flushDNS)
+        XCTAssertEqual(VoiceCommandParser.parse("What's eating my CPU?"), .topCPUConsumers)
+        XCTAssertEqual(VoiceCommandParser.parse("What is using my memory"), .topMemoryConsumers)
+        XCTAssertEqual(VoiceCommandParser.parse("Hey Jarvis, scan Space Lens on working directory"), .scanSpaceLens(folderHint: "working-directory"))
+        XCTAssertEqual(VoiceCommandParser.parse("Scan Space Lens on Downloads"), .scanSpaceLens(folderHint: "Downloads"))
+        XCTAssertEqual(VoiceCommandParser.parse("Clean node modules and Docker"), .runDevAISweeper)
+        XCTAssertEqual(VoiceCommandParser.parse("Activate screen cleaning mode"), .screenCleaningMode)
+        XCTAssertEqual(VoiceCommandParser.parse("Give me a system briefing"), .systemBriefing)
+        XCTAssertEqual(VoiceCommandParser.parse("Check for app updates"), .checkUpdates)
+        XCTAssertEqual(VoiceCommandParser.parse("Empty the trash"), .emptyTrash)
+        XCTAssertEqual(VoiceCommandParser.parse("Stop"), .stopScan)
+        XCTAssertEqual(VoiceCommandParser.parse("Mute voice"), .muteVoice)
+        XCTAssertEqual(VoiceCommandParser.parse("Open Applications"), .openModule(.applications))
+        if case .unknown = VoiceCommandParser.parse("play some jazz music") {
+            // expected
+        } else {
+            XCTFail("Unrelated phrase should resolve to .unknown")
+        }
+    }
+
     func testAssistantHealthScoring() {
         let assistant = AssistantService()
         var telemetry = SystemTelemetrySnapshot()

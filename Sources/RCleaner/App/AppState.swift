@@ -16,6 +16,7 @@ public final class AppState: ObservableObject {
     public let cloudEmailService = CloudAndEmailService()
     public let assistantService = AssistantService()
     public let voiceService = VoiceAssistantService()
+    public let voiceCommandService = VoiceCommandService()
     public let updaterService = AppUpdaterService()
 
     // Navigation & Global UI
@@ -24,6 +25,7 @@ public final class AppState: ObservableObject {
     @Published public var showAssistantPopover: Bool = false
     @Published public var showSettingsWindow: Bool = false
     @Published public var showUpdateSheet: Bool = false
+    @Published public var showJarvisCommandDeck: Bool = false
     @Published public var isScreenCleaningActive: Bool = false
     @Published public var statusBannerMessage: String? = nil
 
@@ -407,6 +409,198 @@ public final class AppState: ObservableObject {
         } else {
             showBanner("Voice AI online")
             playVoiceCue(.voiceTest)
+        }
+    }
+
+    // MARK: - Two-Way Jarvis Voice Commands
+
+    public func openJarvisCommandDeck(startListening: Bool = true) {
+        if showIntroFlow {
+            completeIntro(startSmartCare: false)
+        }
+        voiceCommandService.lastResultCard = nil
+        withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
+            showJarvisCommandDeck = true
+        }
+        if startListening {
+            startJarvisListening()
+        }
+    }
+
+    public func startJarvisListening() {
+        // Silence outgoing Jarvis speech so the microphone never hears Jarvis himself
+        voiceService.stop()
+        voiceCommandService.lastResultCard = nil
+        voiceCommandService.startListening { [weak self] transcript in
+            self?.executeJarvisVoiceCommand(transcript)
+        }
+    }
+
+    public func dismissJarvisCommandDeck() {
+        voiceCommandService.stopListening(triggerCallback: false)
+        withAnimation(.easeOut(duration: 0.20)) {
+            showJarvisCommandDeck = false
+        }
+    }
+
+    public func quickFlushDNS() {
+        let service = performanceService
+        Task.detached(priority: .userInitiated) {
+            let (_, msg) = service.executeSingleTask(.flushDNS)
+            await MainActor.run {
+                self.stats.totalMaintenanceTasksRun += 1
+                self.stats.totalTimeSavedMinutes += 2
+                self.showBanner(msg)
+                self.playVoiceCue(.briefingNominal)
+            }
+        }
+    }
+
+    public func executeJarvisVoiceCommand(_ rawText: String) {
+        let intent = VoiceCommandParser.parse(rawText)
+        voiceCommandService.stopListening(triggerCallback: false)
+
+        switch intent {
+        case .runSmartCare:
+            dismissJarvisCommandDeck()
+            selectedModule = .smartCare
+            startSmartCareScan()
+
+        case .runCleanup:
+            dismissJarvisCommandDeck()
+            selectedModule = .cleanup
+            startCleanupScan()
+
+        case .runProtection:
+            dismissJarvisCommandDeck()
+            selectedModule = .protection
+            startProtectionScan()
+
+        case .runDevAISweeper:
+            dismissJarvisCommandDeck()
+            selectedModule = .devAISweeper
+            startDevAISweeperScan()
+
+        case .scanSpaceLens(let hint):
+            dismissJarvisCommandDeck()
+            selectedModule = .spaceLens
+            let targetURL: URL
+            switch hint {
+            case "working-directory":
+                let candidate = FileSystemHelpers.expand("~/working-directory")
+                targetURL = FileManager.default.fileExists(atPath: candidate)
+                    ? URL(fileURLWithPath: candidate)
+                    : FileManager.default.homeDirectoryForCurrentUser
+            case "Downloads":
+                targetURL = URL(fileURLWithPath: FileSystemHelpers.expand("~/Downloads"))
+            case "Desktop":
+                targetURL = URL(fileURLWithPath: FileSystemHelpers.expand("~/Desktop"))
+            case "Documents":
+                targetURL = URL(fileURLWithPath: FileSystemHelpers.expand("~/Documents"))
+            default:
+                targetURL = FileManager.default.homeDirectoryForCurrentUser
+            }
+            startSpaceLensScan(url: targetURL)
+            playVoiceCue(.cleanupStart)
+
+        case .freeUpRAM:
+            dismissJarvisCommandDeck()
+            quickFreeUpRAM()
+
+        case .flushDNS:
+            dismissJarvisCommandDeck()
+            quickFlushDNS()
+
+        case .emptyTrash:
+            dismissJarvisCommandDeck()
+            quickEmptyTrash()
+            playVoiceCue(.cleanupComplete)
+
+        case .screenCleaningMode:
+            dismissJarvisCommandDeck()
+            launchScreenCleaningMode()
+
+        case .systemBriefing:
+            dismissJarvisCommandDeck()
+            speakSystemBriefing()
+
+        case .topCPUConsumers:
+            // Keep HUD open and display live top CPU consumers with 1-click Quit
+            let svc = telemetryService
+            Task.detached(priority: .userInitiated) {
+                let snap = svc.captureSnapshot(includeProcessesAndDrives: true)
+                await MainActor.run {
+                    self.telemetry = snap
+                    let top = Array(snap.topCPUConsumers.prefix(3))
+                    let summary: String
+                    if let first = top.first {
+                        summary = "\(first.name) is leading CPU usage at \(String(format: "%.1f%%", first.cpuPercent))."
+                    } else {
+                        summary = "CPU load is calm across all processes."
+                    }
+                    self.voiceCommandService.lastResultCard = VoiceCommandResultCard(
+                        title: "Top CPU Consumers (\(Int(snap.cpu.totalLoadPercent))% Total)",
+                        subtitle: summary,
+                        iconName: "cpu.fill",
+                        processes: top,
+                        metricMode: .cpu
+                    )
+                    self.playVoiceCue(snap.cpu.totalLoadPercent >= 70 ? .briefingPerfHeavy : .briefingPerfNominal)
+                }
+            }
+
+        case .topMemoryConsumers:
+            let svc = telemetryService
+            Task.detached(priority: .userInitiated) {
+                let snap = svc.captureSnapshot(includeProcessesAndDrives: true)
+                await MainActor.run {
+                    self.telemetry = snap
+                    let top = Array(snap.topMemoryConsumers.prefix(3))
+                    let summary: String
+                    if let first = top.first {
+                        summary = "\(first.name) is using \(ByteFormat.string(first.memoryBytes)) of memory."
+                    } else {
+                        summary = "Memory usage is balanced."
+                    }
+                    self.voiceCommandService.lastResultCard = VoiceCommandResultCard(
+                        title: "Top Memory Consumers (\(ByteFormat.string(snap.memory.availableBytes)) Free)",
+                        subtitle: summary,
+                        iconName: "memorychip.fill",
+                        processes: top,
+                        metricMode: .memory
+                    )
+                    self.playVoiceCue(snap.memory.pressurePercent >= 85 ? .briefingPerfHeavy : .briefingPerfNominal)
+                }
+            }
+
+        case .checkUpdates:
+            dismissJarvisCommandDeck()
+            checkForUpdates(userInitiated: true)
+
+        case .openModule(let module):
+            dismissJarvisCommandDeck()
+            selectedModule = module
+            showBanner("Opened \(module.rawValue)")
+
+        case .stopScan:
+            dismissJarvisCommandDeck()
+            stopCurrentTask()
+            showBanner("Active scan stopped")
+
+        case .muteVoice:
+            dismissJarvisCommandDeck()
+            if settings.enableVoiceAssistant { toggleVoiceAssistant() }
+
+        case .unmuteVoice:
+            dismissJarvisCommandDeck()
+            if !settings.enableVoiceAssistant { toggleVoiceAssistant() }
+
+        case .unknown(let raw):
+            voiceCommandService.lastResultCard = VoiceCommandResultCard(
+                title: "Command Not Recognized",
+                subtitle: "I heard “\(raw)”. Try saying “Run Smart Care”, “Dev & AI Sweeper”, “Free up RAM”, “Flush DNS”, or “What's eating my CPU?”.",
+                iconName: "questionmark.circle.fill"
+            )
         }
     }
 

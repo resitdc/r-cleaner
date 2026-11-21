@@ -3,7 +3,7 @@ import SwiftUI
 
 // MARK: - Sidebar Modules Navigation Hierarchy
 
-public enum RCleanerModule: String, CaseIterable, Identifiable, Codable {
+public enum RCleanerModule: String, CaseIterable, Identifiable, Codable, Sendable {
     case smartCare = "Smart Care"
     case cleanup = "Cleanup"
     case protection = "Protection"

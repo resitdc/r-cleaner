@@ -67,6 +67,7 @@ Agar pemindaian berjalan maksimal, Anda dapat mengaktifkan izin melalui **Settin
 ### 3. Sistem Voice AI Bawaan (Siap Pakai Tanpa Unduh Tambahan)
 - R-Cleaner sudah dilengkapi paket suara neural British bergaya Jarvis secara offline (`27` klip terintegrasi di dalam aplikasi) lengkap dengan pemrosesan audio HUD real-time `AVAudioEngine`—pengguna **tidak perlu mengunduh suara tambahan**.
 - **Briefing Sistem Langsung:** Klik tombol **Voice AI** di pojok kanan atas jendela untuk mendengarkan laporan suara real-time mengenai skor kesehatan Mac, kapasitas penyimpanan, beban CPU/RAM, dan status keamanan. Klik kembali untuk menghentikan suara.
+- **Perintah Suara Dua Arah Jarvis (`⌘⇧J`):** Klik ikon **Mikrofon** di dalam tombol Voice AI (atau tekan **`⌘⇧J`**) untuk membuka Jarvis Command Deck berbasis pengenalan suara on-device macOS (100% offline & privat). Ucapkan atau ketik perintah seperti *"Run Smart Care"*, *"Dev & AI Sweeper"*, *"Free up RAM"*, *"Flush DNS"*, *"Scan Space Lens on working directory"*, atau *"What's eating my CPU?"*.
 - **Mute Cepat:** Klik ikon speaker di sisi kanan tombol **Voice AI** untuk membisukan atau mengaktifkan kembali suara asisten kapan saja.
 - **Kustomisasi:** Buka **Settings → Voice AI** untuk mengatur paket suara bawaan, efek audio HUD & chime, uji suara (*Test Built-in Jarvis Voice*), atau mengganti panggilan/kecepatan suara TTS.
 

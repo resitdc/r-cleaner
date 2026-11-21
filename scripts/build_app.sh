@@ -99,6 +99,10 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
     <string>Allow R-Cleaner to detect similar photos and visual flaws.</string>
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Allow R-Cleaner to inspect your current Wi-Fi network security settings.</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Allow R-Cleaner to listen for your two-way Jarvis voice commands locally on your Mac.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>Allow R-Cleaner to transcribe your Jarvis voice commands on-device for hands-free Mac care.</string>
 </dict>
 </plist>
 EOF

@@ -42,6 +42,13 @@ public struct MainWindowView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 }
+                .overlay {
+                    if appState.showJarvisCommandDeck {
+                        JarvisCommandOverlay(commandService: appState.voiceCommandService)
+                            .environmentObject(appState)
+                            .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                    }
+                }
                 .transition(.opacity)
             }
         }
@@ -240,10 +247,13 @@ public struct MainWindowView: View {
 
                 VoiceHUDButton(
                     voiceService: appState.voiceService,
+                    commandService: appState.voiceCommandService,
                     isEnabled: appState.settings.enableVoiceAssistant,
                     accentColor: activePalette.accent
                 ) {
                     appState.speakSystemBriefing()
+                } onVoiceCommand: {
+                    appState.openJarvisCommandDeck(startListening: true)
                 } onToggleMute: {
                     appState.toggleVoiceAssistant()
                 }
@@ -359,19 +369,22 @@ private struct SidebarRowView: View {
 }
 
 /// Frosted-glass Voice AI pill in the top-right bar, harmonized with the active module's palette.
-/// Displays an animated equalizer ONLY while actively speaking (0% idle overhead).
+/// Includes one-click live System Briefing, two-way Jarvis Voice Command mic trigger (⌘⇧J), and mute toggle.
 private struct VoiceHUDButton: View {
     @ObservedObject var voiceService: VoiceAssistantService
+    @ObservedObject var commandService: VoiceCommandService
     let isEnabled: Bool
     let accentColor: Color
     let onBriefing: () -> Void
+    let onVoiceCommand: () -> Void
     let onToggleMute: () -> Void
 
     var body: some View {
-        let borderColor: Color = voiceService.isSpeaking ? accentColor.opacity(0.75) : Color.white.opacity(0.20)
-        let glowColor: Color = voiceService.isSpeaking ? accentColor.opacity(0.35) : .clear
+        let isActive = voiceService.isSpeaking || commandService.isListening
+        let borderColor: Color = isActive ? accentColor.opacity(0.80) : Color.white.opacity(0.20)
+        let glowColor: Color = isActive ? accentColor.opacity(0.38) : .clear
 
-        HStack(spacing: 4) {
+        HStack(spacing: 2) {
             Button(action: onBriefing) {
                 HStack(spacing: 7) {
                     if voiceService.isSpeaking {
@@ -397,6 +410,20 @@ private struct VoiceHUDButton: View {
                 .frame(height: 12)
                 .overlay(Color.white.opacity(0.18))
 
+            Button(action: onVoiceCommand) {
+                Image(systemName: commandService.isListening ? "mic.fill" : "mic")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(commandService.isListening ? Color(hex: "00F5D4") : accentColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 7)
+            }
+            .buttonStyle(.plain)
+            .help("Jarvis Voice Command (⌘⇧J) — Speak or type commands")
+
+            Divider()
+                .frame(height: 12)
+                .overlay(Color.white.opacity(0.18))
+
             Button(action: onToggleMute) {
                 Image(systemName: isEnabled ? "speaker.wave.2.fill" : "speaker.slash")
                     .font(.system(size: 10.5))
@@ -413,6 +440,7 @@ private struct VoiceHUDButton: View {
     }
 
     private var statusTitle: String {
+        if commandService.isListening { return "Listening" }
         if voiceService.isSpeaking { return "Speaking" }
         return isEnabled ? "Voice AI" : "Muted"
     }

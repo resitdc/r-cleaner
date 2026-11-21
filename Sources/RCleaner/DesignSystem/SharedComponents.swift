@@ -516,7 +516,7 @@ public struct ModuleHeaderBar: View {
                 }
             }
 
-            Spacer(minLength: 260) // Keeps header clear of top-right Voice AI + Assistant pills
+            Spacer(minLength: 295) // Keeps header clear of top-right Voice AI + Mic + Assistant pills
         }
         .padding(.leading, 24)
         .padding(.trailing, 18)

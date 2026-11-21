@@ -20,6 +20,7 @@ let package = Package(
                 .linkedFramework("AppKit"),
                 .linkedFramework("SwiftUI"),
                 .linkedFramework("AVFoundation"),
+                .linkedFramework("Speech"),
                 .linkedFramework("IOKit"),
                 .linkedFramework("CoreWLAN"),
                 .linkedFramework("CryptoKit"),

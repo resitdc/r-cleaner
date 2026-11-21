@@ -153,6 +153,24 @@ public struct SettingsView: View {
                 }
             }
 
+            Section("Two-Way Jarvis Voice Commands (On-Device Speech Recognition)") {
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Hands-Free Command Deck (⌘⇧J)")
+                            .fontWeight(.semibold)
+                        Text("Runs privately on-device via macOS Speech Recognition. Say “Run Smart Care”, “Dev & AI Sweeper”, “Free up RAM”, or “What's eating my CPU?”.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Open Command Bar") {
+                        dismiss()
+                        appState.openJarvisCommandDeck(startListening: true)
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+
             Section("Live Telemetry Speech (macOS Built-in TTS)") {
                 TextField("Address me as (e.g., sir, boss, your name)", text: $appState.settings.voiceAddressTitle)
 

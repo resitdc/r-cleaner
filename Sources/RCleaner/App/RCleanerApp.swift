@@ -59,6 +59,13 @@ public struct RCleanerApp: App {
                 .keyboardShortcut(",", modifiers: .command)
             }
             CommandMenu("Care") {
+                Button("Jarvis Voice Command...") {
+                    appState.openJarvisCommandDeck(startListening: true)
+                }
+                .keyboardShortcut("j", modifiers: [.command, .shift])
+
+                Divider()
+
                 Button("Run Smart Care") {
                     appState.selectedModule = .smartCare
                     appState.startSmartCareScan()
