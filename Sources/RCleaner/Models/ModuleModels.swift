@@ -11,6 +11,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable {
     case applications = "Applications"
     case myClutter = "My Clutter"
     case spaceLens = "Space Lens"
+    case devAISweeper = "Dev & AI Sweeper"
     case cloudCleanup = "Cloud Cleanup"
     case emailCleanup = "Email Cleanup"
     case myTools = "My Tools"
@@ -27,6 +28,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable {
         case .applications: return "Take control of your applications. Uninstall, update or remove old leftovers."
         case .myClutter: return "Sort through your files and reduce the mess in just a few clicks."
         case .spaceLens: return "Visualize what's taking up the most disk space and clean up quickly."
+        case .devAISweeper: return "Sweep stale node_modules, Rust/Swift/Gradle builds, Xcode, Docker, and local AI caches."
         case .cloudCleanup: return "Tidy up your cloud files to save space and keep your storage in check."
         case .emailCleanup: return "Clear out inbox clutter and unsubscribe from unwanted newsletters."
         case .myTools: return "Quick tools for focused tasks — clean up, protect, and maintain your Mac."
@@ -43,6 +45,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable {
         case .applications: return "square.grid.2x2.fill"
         case .myClutter: return "doc.on.doc.fill"
         case .spaceLens: return "circle.hexagongrid.fill"
+        case .devAISweeper: return "terminal.fill"
         case .cloudCleanup: return "icloud.fill"
         case .emailCleanup: return "envelope.badge.fill"
         case .myTools: return "wrench.and.screwdriver.fill"
@@ -52,7 +55,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable {
 
     public var badgeText: String? {
         switch self {
-        case .emailCleanup: return "New"
+        case .devAISweeper: return "New"
         default: return nil
         }
     }
@@ -764,4 +767,123 @@ public struct QuickToolItem: Identifiable, Hashable {
     public let targetModule: RCleanerModule
     public let focusedFlowID: String
     public let accentHex: String
+}
+
+// MARK: - Dev & AI Storage Sweeper Models
+
+public enum DevAISweeperCategory: String, CaseIterable, Identifiable, Codable, Sendable {
+    case projectArtifacts = "Project Artifacts"
+    case xcodeMobile = "Xcode & Mobile"
+    case packageCaches = "Package Caches"
+    case dockerContainers = "Docker & Containers"
+    case aiModelsAndCaches = "AI & Models"
+
+    public var id: String { rawValue }
+
+    public var iconName: String {
+        switch self {
+        case .projectArtifacts: return "folder.badge.gearshape"
+        case .xcodeMobile: return "hammer.fill"
+        case .packageCaches: return "shippingbox.fill"
+        case .dockerContainers: return "cube.transparent.fill"
+        case .aiModelsAndCaches: return "brain.head.profile"
+        }
+    }
+
+    public var accentHex: String {
+        switch self {
+        case .projectArtifacts: return "00F5D4"
+        case .xcodeMobile: return "38BDF8"
+        case .packageCaches: return "FFB703"
+        case .dockerContainers: return "60A5FA"
+        case .aiModelsAndCaches: return "C77DFF"
+        }
+    }
+
+    public var summaryDescription: String {
+        switch self {
+        case .projectArtifacts: return "Regenerable build folders (node_modules, target, .build, .venv, Pods, Gradle build)."
+        case .xcodeMobile: return "Xcode DerivedData, DeviceSupport, Simulators, and Android SDK / AVD caches."
+        case .packageCaches: return "Global package manager stores and download caches (npm, pnpm, Cargo, Gradle, Go, Homebrew, uv)."
+        case .dockerContainers: return "Reclaimable Docker & OrbStack build caches, dangling images, and stopped containers."
+        case .aiModelsAndCaches: return "Local LLM weights (Ollama, LM Studio, HuggingFace) and AI coding tool caches."
+        }
+    }
+}
+
+public enum DevAIActionKind: Hashable, Codable, Sendable {
+    case filesystemPath
+    case ollamaModel(blobPaths: [String])
+    case dockerPrune(binaryPath: String, arguments: [String])
+}
+
+public struct DevAIArtifactItem: Identifiable, Hashable, Sendable {
+    public let id: UUID
+    public var name: String
+    public var projectName: String
+    public var ecosystem: String
+    public var category: DevAISweeperCategory
+    public var path: String
+    public var sizeBytes: Int64
+    public var itemCount: Int
+    public var ageDays: Int?
+    public var rebuildHint: String
+    public var badge: String?
+    public var isSafeAutoSelect: Bool
+    public var isSelected: Bool
+    public var actionKind: DevAIActionKind
+
+    public init(
+        id: UUID = UUID(),
+        name: String,
+        projectName: String,
+        ecosystem: String,
+        category: DevAISweeperCategory,
+        path: String,
+        sizeBytes: Int64,
+        itemCount: Int = 0,
+        ageDays: Int? = nil,
+        rebuildHint: String,
+        badge: String? = nil,
+        isSafeAutoSelect: Bool = false,
+        isSelected: Bool = false,
+        actionKind: DevAIActionKind = .filesystemPath
+    ) {
+        self.id = id
+        self.name = name
+        self.projectName = projectName
+        self.ecosystem = ecosystem
+        self.category = category
+        self.path = path
+        self.sizeBytes = sizeBytes
+        self.itemCount = itemCount
+        self.ageDays = ageDays
+        self.rebuildHint = rebuildHint
+        self.badge = badge
+        self.isSafeAutoSelect = isSafeAutoSelect
+        self.isSelected = isSelected
+        self.actionKind = actionKind
+    }
+}
+
+public struct DevAISweeperScanResult: Sendable {
+    public var items: [DevAIArtifactItem] = []
+    public var scannedWorkspaces: [String] = []
+    public var scanDurationSeconds: Double = 0
+    public var dockerDetected: Bool = false
+    public var dockerStatusNote: String? = nil
+
+    public init() {}
+
+    public var totalBytes: Int64 { items.reduce(0) { $0 + $1.sizeBytes } }
+    public var selectedBytes: Int64 { items.filter(\.isSelected).reduce(0) { $0 + $1.sizeBytes } }
+    public var selectedCount: Int { items.filter(\.isSelected).count }
+
+    public func bytes(for category: DevAISweeperCategory) -> Int64 {
+        items.filter { $0.category == category }.reduce(0) { $0 + $1.sizeBytes }
+    }
+
+    public func count(for category: DevAISweeperCategory) -> Int {
+        items.filter { $0.category == category }.count
+    }
 }

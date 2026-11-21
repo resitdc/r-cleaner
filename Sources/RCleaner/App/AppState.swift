@@ -12,6 +12,7 @@ public final class AppState: ObservableObject {
     public let applicationsService = ApplicationsService()
     public let clutterService = ClutterScannerService()
     public let spaceLensService = SpaceLensService()
+    public let devAISweeperService = DevAISweeperService()
     public let cloudEmailService = CloudAndEmailService()
     public let assistantService = AssistantService()
     public let voiceService = VoiceAssistantService()
@@ -98,6 +99,13 @@ public final class AppState: ObservableObject {
     @Published public var spaceLensSummary: CleanupSummary? = nil
     @Published public var spaceLensTargetURL: URL = FileManager.default.homeDirectoryForCurrentUser
 
+    // Dev & AI Sweeper State
+    @Published public var devAISweeperStage: ModuleStage = .intro
+    @Published public var devAISweeperResult = DevAISweeperScanResult()
+    @Published public var devAISweeperStatusText: String = ""
+    @Published public var devAISweeperProgress: Double = 0
+    @Published public var devAISweeperSummary: CleanupSummary? = nil
+
     // Cloud Cleanup State
     @Published public var cloudAccounts: [CloudAccountStatus] = []
     @Published public var cloudScanningProvider: CloudProviderKind? = nil
@@ -121,7 +129,7 @@ public final class AppState: ObservableObject {
     public var isAnyScanRunning: Bool {
         smartCareStage == .scanning || cleanupStage == .scanning || protectionStage == .scanning
             || performanceStage == .scanning || applicationsStage == .scanning || clutterStage == .scanning
-            || spaceLensStage == .scanning || emailStage == .scanning || cloudScanningProvider != nil
+            || spaceLensStage == .scanning || devAISweeperStage == .scanning || emailStage == .scanning || cloudScanningProvider != nil
     }
 
     public init() {
@@ -621,6 +629,7 @@ public final class AppState: ObservableObject {
         if applicationsStage == .scanning || applicationsStage == .cleaning { applicationsStage = .intro }
         if clutterStage == .scanning || clutterStage == .cleaning { clutterStage = .intro }
         if spaceLensStage == .scanning || spaceLensStage == .cleaning { spaceLensStage = .intro }
+        if devAISweeperStage == .scanning || devAISweeperStage == .cleaning { devAISweeperStage = .intro }
         if emailStage == .scanning || emailStage == .cleaning { emailStage = .intro }
         cloudScanningProvider = nil
     }
@@ -804,6 +813,62 @@ public final class AppState: ObservableObject {
         }
     }
 
+    public func addDevWorkspaceFolder(_ path: String) {
+        let std = URL(fileURLWithPath: path).standardizedFileURL.path
+        if !settings.devCustomWorkspacePaths.contains(std) {
+            settings.devCustomWorkspacePaths.append(std)
+            showBanner("Added workspace: \(URL(fileURLWithPath: std).lastPathComponent)")
+        }
+    }
+
+    public func startDevAISweeperScan() {
+        activeTask?.cancel()
+        devAISweeperStage = .scanning
+        devAISweeperProgress = 0.05
+        devAISweeperStatusText = "Discovering developer workspaces..."
+        playVoiceCue(.cleanupStart)
+        let currentSettings = settings
+
+        activeTask = Task {
+            let res = await devAISweeperService.scanAll(settings: currentSettings) { msg, pct in
+                Task { @MainActor in
+                    self.devAISweeperStatusText = msg
+                    self.devAISweeperProgress = pct
+                }
+            }
+            if Task.isCancelled { return }
+            self.devAISweeperResult = res
+            self.devAISweeperStage = .resultsOverview
+            FileSystemHelpers.playCompletionSound(enabled: self.settings.playSounds)
+            self.playVoiceCue(res.items.isEmpty ? .smartCareClean : .smartCareComplete)
+        }
+    }
+
+    public func cleanSelectedDevAIItems(moveToTrash: Bool = true) {
+        activeTask?.cancel()
+        devAISweeperStage = .cleaning
+        devAISweeperProgress = 0.05
+        let itemsToProcess = devAISweeperResult.items
+
+        activeTask = Task {
+            let summary = await devAISweeperService.cleanSelected(items: itemsToProcess, moveToTrash: moveToTrash) { msg, pct in
+                Task { @MainActor in
+                    self.devAISweeperStatusText = msg
+                    self.devAISweeperProgress = pct
+                }
+            }
+            if Task.isCancelled { return }
+            self.stats.totalSystemJunkCleanedBytes += summary.bytesFreed
+            self.stats.monthlyCleanedBytes += summary.bytesFreed
+            self.stats.totalTimeSavedMinutes += max(5, summary.itemsProcessed * 2)
+            self.devAISweeperSummary = summary
+            self.devAISweeperStage = .complete
+            self.refreshTelemetry(includeHeavy: true)
+            FileSystemHelpers.playCompletionSound(enabled: self.settings.playSounds)
+            self.playVoiceCue(.cleanupComplete)
+        }
+    }
+
     public func scanCloudProvider(_ account: CloudAccountStatus) {
         activeTask?.cancel()
         cloudScanningProvider = account.provider
@@ -862,6 +927,7 @@ public final class AppState: ObservableObject {
         case "uninstaller", "appUpdater", "appLeftovers": startApplicationsScan(checkUpdatesOnline: tool.focusedFlowID == "appUpdater")
         case "duplicateFinder", "similarImages", "largeAndOld", "downloads": startClutterScan()
         case "spaceLens": startSpaceLensScan()
+        case "devAISweeper": startDevAISweeperScan()
         case "emailCleanup": startEmailScan()
         default: break
         }

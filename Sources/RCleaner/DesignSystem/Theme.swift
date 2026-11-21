@@ -77,6 +77,15 @@ public enum RCleanerTheme {
                 backgroundMid: Color(hex: "102B44"),
                 backgroundBottom: Color(hex: "06111C")
             )
+        case .devAISweeper:
+            return ModulePalette(
+                primary: Color(hex: "00D2A0"),
+                secondary: Color(hex: "00A8E8"),
+                accent: Color(hex: "5EFCE8"),
+                backgroundTop: Color(hex: "071E22"),
+                backgroundMid: Color(hex: "0C2F35"),
+                backgroundBottom: Color(hex: "041114")
+            )
         case .cloudCleanup:
             return ModulePalette(
                 primary: Color(hex: "38BDF8"),

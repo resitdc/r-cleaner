@@ -135,6 +135,66 @@ final class RCleanerTests: XCTestCase {
         XCTAssertEqual(ByteFormat.itemCount(4_354_232), "4M items")
     }
 
+    func testDevAISweeperArtifactDetectionAndSafety() async throws {
+        let tempRoot = FileManager.default.temporaryDirectory.appendingPathComponent("rcleaner-devsweep-\(UUID().uuidString)")
+        let fm = FileManager.default
+        defer { try? fm.removeItem(at: tempRoot) }
+
+        // 1. Valid stale Node.js project with nested node_modules (nested must be pruned, not reported twice)
+        let nodeProj = tempRoot.appendingPathComponent("old-web-app")
+        let nodeMods = nodeProj.appendingPathComponent("node_modules/pkg/node_modules")
+        try fm.createDirectory(at: nodeMods, withIntermediateDirectories: true)
+        let pkgJSON = nodeProj.appendingPathComponent("package.json")
+        try Data("{}".utf8).write(to: pkgJSON)
+        let bigJS = nodeProj.appendingPathComponent("node_modules/bundle.js")
+        try Data(repeating: 0x41, count: 1_500_000).write(to: bigJS)
+
+        // Backdate old-web-app by 45 days so it's detected as stale
+        let oldDate = Date().addingTimeInterval(-45 * 86_400)
+        for u in [pkgJSON, bigJS, nodeProj.appendingPathComponent("node_modules"), nodeProj] {
+            try fm.setAttributes([.modificationDate: oldDate], ofItemAtPath: u.path)
+        }
+
+        // 2. Valid active Rust project (modified today -> must NOT be auto-selected)
+        let rustProj = tempRoot.appendingPathComponent("active-rust")
+        let rustTarget = rustProj.appendingPathComponent("target/debug")
+        try fm.createDirectory(at: rustTarget, withIntermediateDirectories: true)
+        try Data("[package]\nname = \"demo\"".utf8).write(to: rustProj.appendingPathComponent("Cargo.toml"))
+        try Data(repeating: 0x42, count: 1_500_000).write(to: rustTarget.appendingPathComponent("demo"))
+
+        // 3. Decoy user folder named "build" with NO manifest sibling -> must NEVER be flagged
+        let decoy = tempRoot.appendingPathComponent("my-photos/build")
+        try fm.createDirectory(at: decoy, withIntermediateDirectories: true)
+        try Data(repeating: 0x43, count: 1_500_000).write(to: decoy.appendingPathComponent("photo.jpg"))
+
+        let service = DevAISweeperService()
+        let result = await service.scanAll(
+            settings: RCleanerSettings(),
+            customWorkspaces: [tempRoot.path],
+            includeDefaultWorkspaces: false,
+            includeSystemCategories: false,
+            staleDaysThreshold: 30
+        ) { _, _ in }
+
+        let tempHits = result.items.filter { $0.path.hasPrefix(tempRoot.path) }
+        XCTAssertEqual(tempHits.count, 2, "Expected exactly old-web-app/node_modules and active-rust/target")
+
+        let nodeHit = tempHits.first { $0.projectName == "old-web-app" }
+        XCTAssertNotNil(nodeHit)
+        XCTAssertEqual(nodeHit?.ecosystem, "Node.js")
+        XCTAssertTrue(nodeHit?.isSelected == true, "Stale 45d node_modules should be auto-selected")
+        XCTAssertGreaterThanOrEqual(nodeHit?.ageDays ?? 0, 40)
+
+        let rustHit = tempHits.first { $0.projectName == "active-rust" }
+        XCTAssertNotNil(rustHit)
+        XCTAssertEqual(rustHit?.ecosystem, "Rust")
+        XCTAssertFalse(rustHit?.isSelected == true, "Active Rust target/ modified today must NOT be auto-selected")
+
+        XCTAssertFalse(tempHits.contains { $0.path.contains("my-photos/build") }, "Decoy build folder without manifest must never be flagged")
+        XCTAssertEqual(DevAISweeperService.parseDockerSize("12.5GB (85%)"), 12_500_000_000)
+        XCTAssertEqual(DevAISweeperService.parseDockerSize("480MB"), 480_000_000)
+    }
+
     func testAssistantHealthScoring() {
         let assistant = AssistantService()
         var telemetry = SystemTelemetrySnapshot()

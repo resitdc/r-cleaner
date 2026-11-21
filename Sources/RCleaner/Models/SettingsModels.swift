@@ -38,6 +38,7 @@ public enum MalwareScanMode: String, CaseIterable, Codable, Identifiable {
 public enum IgnoreListCategory: String, CaseIterable, Codable, Identifiable {
     case systemJunk = "System Junk"
     case aiClutter = "AI Clutter"
+    case devAISweeper = "Dev & AI Sweeper"
     case mailAttachments = "Mail Attachments"
     case malwareRemoval = "Malware Removal"
     case uninstaller = "Uninstaller"
@@ -146,12 +147,16 @@ public struct RCleanerSettings: Codable, Equatable {
     public var notifyTrashedApps: Bool = true
     public var notifyBluetoothLowBattery: Bool = true
 
+    // Dev & AI Sweeper
+    public var devCustomWorkspacePaths: [String] = []
+    public var devStaleDaysThreshold: Int = 30
+
     // Ignore list
     public var ignoredItems: [IgnoredItem] = []
 
     // Favorite quick tools
     public var favoriteToolIDs: [String] = [
-        "systemJunk", "aiClutter", "malwareFinder", "maintenanceTasks", "uninstaller", "screenCleaning"
+        "devAISweeper", "systemJunk", "aiClutter", "malwareFinder", "maintenanceTasks", "uninstaller", "screenCleaning"
     ]
 
     public init() {}
@@ -213,6 +218,9 @@ public struct RCleanerSettings: Codable, Equatable {
         notifyHungApps = (try? c.decodeIfPresent(Bool.self, forKey: .notifyHungApps)) ?? d.notifyHungApps
         notifyTrashedApps = (try? c.decodeIfPresent(Bool.self, forKey: .notifyTrashedApps)) ?? d.notifyTrashedApps
         notifyBluetoothLowBattery = (try? c.decodeIfPresent(Bool.self, forKey: .notifyBluetoothLowBattery)) ?? d.notifyBluetoothLowBattery
+
+        devCustomWorkspacePaths = (try? c.decodeIfPresent([String].self, forKey: .devCustomWorkspacePaths)) ?? d.devCustomWorkspacePaths
+        devStaleDaysThreshold = (try? c.decodeIfPresent(Int.self, forKey: .devStaleDaysThreshold)) ?? d.devStaleDaysThreshold
 
         ignoredItems = (try? c.decodeIfPresent([IgnoredItem].self, forKey: .ignoredItems)) ?? d.ignoredItems
         favoriteToolIDs = (try? c.decodeIfPresent([String].self, forKey: .favoriteToolIDs)) ?? d.favoriteToolIDs

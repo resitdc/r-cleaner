@@ -9,6 +9,7 @@ public struct MyToolsView: View {
 
     private var allTools: [QuickToolItem] {
         [
+            QuickToolItem(id: "devAISweeper", title: "Dev & AI Sweeper", description: "Sweep stale node_modules, Rust target, Swift .build, Xcode, Docker, and local AI caches.", iconName: "terminal.fill", keywords: ["dev", "developer", "node_modules", "rust", "target", "xcode", "docker", "gradle", "ai", "ollama", "python", "venv"], badge: "New", targetModule: .devAISweeper, focusedFlowID: "devAISweeper", accentHex: "00D2A0"),
             QuickToolItem(id: "systemJunk", title: "System Junk", description: "Remove redundant caches, logs, and Xcode derived data.", iconName: "sparkles.rectangle.stack.fill", keywords: ["cache", "logs", "junk", "xcode"], badge: nil, targetModule: .cleanup, focusedFlowID: "systemJunk", accentHex: "F44B98"),
             QuickToolItem(id: "aiClutter", title: "AI Clutter", description: "Clean Claude, Codex, Gemini, Cursor caches & local Ollama/LM Studio models.", iconName: "wand.and.rays", keywords: ["ai", "ollama", "lm studio", "claude", "cursor", "gemini"], badge: "New", targetModule: .cleanup, focusedFlowID: "aiClutter", accentHex: "FF7A59"),
             QuickToolItem(id: "mailAttachments", title: "Mail Attachments", description: "Remove locally stored email attachment copies.", iconName: "envelope.open.fill", keywords: ["mail", "attachments"], badge: nil, targetModule: .cleanup, focusedFlowID: "mailAttachments", accentHex: "FFB56B"),
