@@ -805,6 +805,7 @@ public final class AppState: ObservableObject {
     }
 
     public func scanCloudProvider(_ account: CloudAccountStatus) {
+        activeTask?.cancel()
         cloudScanningProvider = account.provider
         cloudScanProgress = 0.05
         activeTask = Task {
@@ -814,6 +815,7 @@ public final class AppState: ObservableObject {
                     self.cloudScanProgress = pct
                 }
             }
+            if Task.isCancelled { return }
             if let idx = self.cloudAccounts.firstIndex(where: { $0.id == updated.id }) {
                 self.cloudAccounts[idx] = updated
             }

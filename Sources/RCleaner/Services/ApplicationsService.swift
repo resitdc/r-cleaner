@@ -87,6 +87,7 @@ public final class ApplicationsService {
         }
 
         for (idx, url) in appURLs.enumerated() {
+            if Task.isCancelled { break }
             let appPath = url.path
             if FileSystemHelpers.isIgnored(path: appPath, category: .uninstaller, settings: settings) { continue }
             if idx % 8 == 0 {
@@ -101,6 +102,8 @@ public final class ApplicationsService {
                 ?? (plist?["CFBundleName"] as? String)
                 ?? url.deletingPathExtension().lastPathComponent
             let bundleID = (plist?["CFBundleIdentifier"] as? String) ?? "unknown.\(name.lowercased())"
+            // Never list R-Cleaner itself in Uninstaller to prevent accidental self-uninstall
+            if bundleID == "com.resitdc.r-cleaner" || bundleID == Bundle.main.bundleIdentifier { continue }
             let version = (plist?["CFBundleShortVersionString"] as? String)
                 ?? (plist?["CFBundleVersion"] as? String)
                 ?? "1.0"
@@ -385,9 +388,14 @@ public final class ApplicationsService {
         var fail = 0
 
         for app in apps where app.isSelected {
-            // Quit running app first
+            // Quit running app first and allow brief graceful shutdown before removing files
+            var terminatedAny = false
             for running in NSWorkspace.shared.runningApplications where running.bundleIdentifier == app.bundleID {
                 running.terminate()
+                terminatedAny = true
+            }
+            if terminatedAny {
+                try? await Task.sleep(nanoseconds: 250_000_000)
             }
 
             // Remove selected related files

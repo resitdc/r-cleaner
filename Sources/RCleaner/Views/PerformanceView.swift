@@ -168,11 +168,15 @@ public struct PerformanceView: View {
                                 Spacer()
 
                                 Button("Run Now") {
-                                    Task {
-                                        let (_, msg) = appState.performanceService.executeSingleTask(task.kind)
-                                        appState.stats.totalMaintenanceTasksRun += 1
-                                        appState.showBanner("\(task.kind.rawValue): \(msg)")
-                                        appState.refreshTelemetry(includeHeavy: true)
+                                    let kind = task.kind
+                                    let perfService = appState.performanceService
+                                    Task.detached(priority: .userInitiated) {
+                                        let (_, msg) = perfService.executeSingleTask(kind)
+                                        await MainActor.run {
+                                            appState.stats.totalMaintenanceTasksRun += 1
+                                            appState.showBanner("\(kind.rawValue): \(msg)")
+                                            appState.refreshTelemetry(includeHeavy: true)
+                                        }
                                     }
                                 }
                                 .font(.system(size: 11, weight: .semibold))
@@ -234,9 +238,16 @@ public struct PerformanceView: View {
 
                                 if !isLogin && item.domain == "User Launch Agent" {
                                     Button(item.isEnabled ? "Disable" : "Enable") {
-                                        let (_, msg) = appState.performanceService.toggleBackgroundItem(item, enable: !item.isEnabled)
-                                        appState.showBanner(msg)
-                                        appState.startPerformanceScan()
+                                        let targetItem = item
+                                        let nextEnable = !item.isEnabled
+                                        let perfService = appState.performanceService
+                                        Task.detached(priority: .userInitiated) {
+                                            let (_, msg) = perfService.toggleBackgroundItem(targetItem, enable: nextEnable)
+                                            await MainActor.run {
+                                                appState.showBanner(msg)
+                                                appState.startPerformanceScan()
+                                            }
+                                        }
                                     }
                                     .font(.system(size: 10, weight: .semibold))
                                     .foregroundStyle(.white)

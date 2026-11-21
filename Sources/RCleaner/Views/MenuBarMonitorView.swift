@@ -4,6 +4,7 @@ import AppKit
 /// Menu Bar Satellite Monitor built directly into R-Cleaner via MenuBarExtra.
 public struct MenuBarMonitorView: View {
     @EnvironmentObject var appState: AppState
+    @Environment(\.openWindow) private var openWindow
     @State private var expandedCard: DetailCard? = nil
 
     enum DetailCard: String {
@@ -51,10 +52,7 @@ public struct MenuBarMonitorView: View {
             // Footer
             HStack {
                 Button("Open R-Cleaner") {
-                    NSApp.activate(ignoringOtherApps: true)
-                    if let win = NSApp.windows.first(where: { $0.canBecomeMain }) {
-                        win.makeKeyAndOrderFront(nil)
-                    }
+                    openMainWindow()
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
@@ -62,8 +60,8 @@ public struct MenuBarMonitorView: View {
                 Spacer()
 
                 Button {
+                    openMainWindow()
                     appState.showSettingsWindow = true
-                    NSApp.activate(ignoringOtherApps: true)
                 } label: {
                     Image(systemName: "gearshape")
                 }
@@ -114,7 +112,7 @@ public struct MenuBarMonitorView: View {
                     onAction: {
                         appState.selectedModule = .protection
                         appState.startProtectionScan()
-                        NSApp.activate(ignoringOtherApps: true)
+                        openMainWindow()
                     },
                     onTap: { expandedCard = .protection }
                 )
@@ -403,8 +401,19 @@ public struct MenuBarMonitorView: View {
                     Spacer()
                     if t.externalDrives.count > 1 {
                         Button("Eject All") {
-                            for d in t.externalDrives { _ = appState.telemetryService.ejectDrive(at: d.mountPath) }
-                            appState.refreshTelemetry(includeHeavy: true)
+                            let paths = t.externalDrives.map(\.mountPath)
+                            let service = appState.telemetryService
+                            Task.detached(priority: .userInitiated) {
+                                var ejected = 0
+                                for p in paths {
+                                    if service.ejectDrive(at: p) { ejected += 1 }
+                                }
+                                let ejectedCount = ejected
+                                await MainActor.run {
+                                    appState.showBanner("Ejected \(ejectedCount) of \(paths.count) drive(s)")
+                                    appState.refreshTelemetry(includeHeavy: true)
+                                }
+                            }
                         }
                         .controlSize(.mini)
                     }
@@ -417,8 +426,16 @@ public struct MenuBarMonitorView: View {
                         }
                         Spacer()
                         Button("Eject") {
-                            _ = appState.telemetryService.ejectDrive(at: drive.mountPath)
-                            appState.refreshTelemetry(includeHeavy: true)
+                            let path = drive.mountPath
+                            let name = drive.name
+                            let service = appState.telemetryService
+                            Task.detached(priority: .userInitiated) {
+                                let ok = service.ejectDrive(at: path)
+                                await MainActor.run {
+                                    appState.showBanner(ok ? "Ejected \(name)" : "Could not eject \(name) (in use)")
+                                    appState.refreshTelemetry(includeHeavy: true)
+                                }
+                            }
                         }
                         .controlSize(.small)
                     }
@@ -429,6 +446,15 @@ public struct MenuBarMonitorView: View {
         }
         .padding(12)
         .background(RoundedRectangle(cornerRadius: 14).fill(Color.secondary.opacity(0.10)))
+    }
+
+    private func openMainWindow() {
+        NSApp.activate(ignoringOtherApps: true)
+        if let win = NSApp.windows.first(where: { $0.canBecomeMain && $0.isVisible }) {
+            win.makeKeyAndOrderFront(nil)
+        } else {
+            openWindow(id: "main")
+        }
     }
 
     private func detailRow(_ label: String, _ value: String) -> some View {

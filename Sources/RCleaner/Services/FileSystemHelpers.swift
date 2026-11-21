@@ -11,6 +11,29 @@ public enum FileSystemHelpers {
         "/Library/Apple"
     ]
 
+    /// Critical root directories that must never be deleted directly (items inside them may still be managed).
+    private static var protectedExactDirectories: Set<String> {
+        let home = homeDirectory
+        return [
+            "/",
+            "/Applications",
+            "/Library",
+            "/Users",
+            "/Volumes",
+            "/private",
+            "/etc",
+            "/var",
+            home,
+            "\(home)/Library",
+            "\(home)/Desktop",
+            "\(home)/Documents",
+            "\(home)/Downloads",
+            "\(home)/Pictures",
+            "\(home)/Movies",
+            "\(home)/Music"
+        ]
+    }
+
     public static var homeDirectory: String {
         FileManager.default.homeDirectoryForCurrentUser.path
     }
@@ -20,8 +43,10 @@ public enum FileSystemHelpers {
     }
 
     public static func isProtectedSystemPath(_ path: String) -> Bool {
-        let std = (path as NSString).standardizingPath
-        if std == "/" || std == homeDirectory { return true }
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return true }
+        let std = (trimmed as NSString).standardizingPath
+        if protectedExactDirectories.contains(std) { return true }
         return protectedPrefixes.contains { std == $0 || std.hasPrefix($0 + "/") }
     }
 
@@ -72,11 +97,13 @@ public enum FileSystemHelpers {
 
     public static func safeRemoveItem(at path: String, moveToTrash: Bool = true) -> (success: Bool, error: String?) {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: path) else {
-            return (true, nil)
-        }
         if isProtectedSystemPath(path) {
             return (false, "Protected macOS system path cannot be removed.")
+        }
+        // Use attributesOfItem in addition to fileExists so broken symlinks are still detected and removable
+        let existsOrSymlink = fm.fileExists(atPath: path) || ((try? fm.attributesOfItem(atPath: path)) != nil)
+        guard existsOrSymlink else {
+            return (true, nil)
         }
         let url = URL(fileURLWithPath: path)
         do {

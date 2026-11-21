@@ -259,9 +259,12 @@ public final class PerformanceService {
         var fail = 0
         for item in items where item.isSelected {
             if item.isLoginItem {
+                let escapedName = item.name
+                    .replacingOccurrences(of: "\\", with: "\\\\")
+                    .replacingOccurrences(of: "\"", with: "\\\"")
                 let res = FileSystemHelpers.runProcess(
                     "/usr/bin/osascript",
-                    arguments: ["-e", "tell application \"System Events\" to delete login item \"\(item.name)\""],
+                    arguments: ["-e", "tell application \"System Events\" to delete login item \"\(escapedName)\""],
                     timeout: 5
                 )
                 if res.exitCode == 0 {

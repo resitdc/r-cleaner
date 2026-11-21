@@ -8,6 +8,7 @@ public struct ApplicationsView: View {
     @State private var filterKind: UninstallerFilter = .all
     @State private var vendorFilter: AppVendorGroup? = nil
     @State private var expandedAppID: String? = nil
+    @State private var showUninstallConfirmation: Bool = false
     private let palette = RCleanerTheme.palette(for: .applications)
 
     enum AppsTab: String, CaseIterable {
@@ -291,17 +292,27 @@ public struct ApplicationsView: View {
                 palette: palette,
                 isDisabled: selectedApps.isEmpty
             ) {
-                Task {
-                    appState.applicationsStage = .cleaning
-                    let res = await appState.applicationsService.uninstallApps(selectedApps, resetOnly: false)
-                    appState.stats.totalApplicationsCleanedBytes += res.bytesFreed
-                    appState.stats.totalAppsUninstalled += selectedApps.count
-                    appState.stats.monthlyCleanedBytes += res.bytesFreed
-                    appState.applicationsSummary = res
-                    appState.applicationsStage = .complete
-                }
+                showUninstallConfirmation = true
             }
             .padding(.bottom, 12)
+            .alert("Uninstall \(selectedApps.count) application(s)?", isPresented: $showUninstallConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Uninstall", role: .destructive) {
+                    Task {
+                        appState.applicationsStage = .cleaning
+                        let res = await appState.applicationsService.uninstallApps(selectedApps, resetOnly: false)
+                        let uninstalledAppsCount = res.logEntries.filter { $0.status == .cleaned && !$0.itemName.contains(" — ") }.count
+                        appState.stats.totalApplicationsCleanedBytes += res.bytesFreed
+                        appState.stats.totalAppsUninstalled += uninstalledAppsCount
+                        appState.stats.monthlyCleanedBytes += res.bytesFreed
+                        appState.applicationsSummary = res
+                        appState.applicationsStage = .complete
+                        appState.refreshTelemetry(includeHeavy: true)
+                    }
+                }
+            } message: {
+                Text("Selected applications and their checked support files (\(ByteFormat.string(selectedBytes))) will be moved to Trash.")
+            }
         }
     }
 

@@ -155,4 +155,66 @@ public struct RCleanerSettings: Codable, Equatable {
     ]
 
     public init() {}
+
+    /// Resilient decoder: missing keys from older settings.json versions fall back to defaults
+    /// instead of wiping all saved user settings and Ignore List entries on app upgrade.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = RCleanerSettings()
+        hasCompletedIntro = (try? c.decodeIfPresent(Bool.self, forKey: .hasCompletedIntro)) ?? d.hasCompletedIntro
+        playSounds = (try? c.decodeIfPresent(Bool.self, forKey: .playSounds)) ?? d.playSounds
+        reduceMotion = (try? c.decodeIfPresent(Bool.self, forKey: .reduceMotion)) ?? d.reduceMotion
+        showAssistantRecommendations = (try? c.decodeIfPresent(Bool.self, forKey: .showAssistantRecommendations)) ?? d.showAssistantRecommendations
+        enableSmartInsights = (try? c.decodeIfPresent(Bool.self, forKey: .enableSmartInsights)) ?? d.enableSmartInsights
+        checkUpdatesAutomatically = (try? c.decodeIfPresent(Bool.self, forKey: .checkUpdatesAutomatically)) ?? d.checkUpdatesAutomatically
+
+        enableVoiceAssistant = (try? c.decodeIfPresent(Bool.self, forKey: .enableVoiceAssistant)) ?? d.enableVoiceAssistant
+        useBundledVoicePack = (try? c.decodeIfPresent(Bool.self, forKey: .useBundledVoicePack)) ?? d.useBundledVoicePack
+        enableVoiceHudEffects = (try? c.decodeIfPresent(Bool.self, forKey: .enableVoiceHudEffects)) ?? d.enableVoiceHudEffects
+        voiceIdentifier = (try? c.decodeIfPresent(String.self, forKey: .voiceIdentifier)) ?? d.voiceIdentifier
+        voiceRate = (try? c.decodeIfPresent(Double.self, forKey: .voiceRate)) ?? d.voiceRate
+        voicePitch = (try? c.decodeIfPresent(Double.self, forKey: .voicePitch)) ?? d.voicePitch
+        voiceAddressTitle = (try? c.decodeIfPresent(String.self, forKey: .voiceAddressTitle)) ?? d.voiceAddressTitle
+
+        smartCareCleanupEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .smartCareCleanupEnabled)) ?? d.smartCareCleanupEnabled
+        smartCareProtectionEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .smartCareProtectionEnabled)) ?? d.smartCareProtectionEnabled
+        smartCarePerformanceEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .smartCarePerformanceEnabled)) ?? d.smartCarePerformanceEnabled
+        smartCareApplicationsEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .smartCareApplicationsEnabled)) ?? d.smartCareApplicationsEnabled
+        smartCareMyClutterEnabled = (try? c.decodeIfPresent(Bool.self, forKey: .smartCareMyClutterEnabled)) ?? d.smartCareMyClutterEnabled
+
+        scanSystemJunk = (try? c.decodeIfPresent(Bool.self, forKey: .scanSystemJunk)) ?? d.scanSystemJunk
+        scanMailAttachments = (try? c.decodeIfPresent(Bool.self, forKey: .scanMailAttachments)) ?? d.scanMailAttachments
+        scanTrashBins = (try? c.decodeIfPresent(Bool.self, forKey: .scanTrashBins)) ?? d.scanTrashBins
+        scanAIClutter = (try? c.decodeIfPresent(Bool.self, forKey: .scanAIClutter)) ?? d.scanAIClutter
+
+        malwareScanMode = (try? c.decodeIfPresent(MalwareScanMode.self, forKey: .malwareScanMode)) ?? d.malwareScanMode
+        enableRealTimeMalwareMonitor = (try? c.decodeIfPresent(Bool.self, forKey: .enableRealTimeMalwareMonitor)) ?? d.enableRealTimeMalwareMonitor
+        enableBackgroundScan = (try? c.decodeIfPresent(Bool.self, forKey: .enableBackgroundScan)) ?? d.enableBackgroundScan
+        scanArchives = (try? c.decodeIfPresent(Bool.self, forKey: .scanArchives)) ?? d.scanArchives
+        scanDMGImages = (try? c.decodeIfPresent(Bool.self, forKey: .scanDMGImages)) ?? d.scanDMGImages
+        scanEmailAttachments = (try? c.decodeIfPresent(Bool.self, forKey: .scanEmailAttachments)) ?? d.scanEmailAttachments
+        scanUSBDrives = (try? c.decodeIfPresent(Bool.self, forKey: .scanUSBDrives)) ?? d.scanUSBDrives
+        excludeDownloadedICloudFiles = (try? c.decodeIfPresent(Bool.self, forKey: .excludeDownloadedICloudFiles)) ?? d.excludeDownloadedICloudFiles
+
+        ignoreSystemApplications = (try? c.decodeIfPresent(Bool.self, forKey: .ignoreSystemApplications)) ?? d.ignoreSystemApplications
+
+        enableMenuMonitor = (try? c.decodeIfPresent(Bool.self, forKey: .enableMenuMonitor)) ?? d.enableMenuMonitor
+        openMenuAtLogin = (try? c.decodeIfPresent(Bool.self, forKey: .openMenuAtLogin)) ?? d.openMenuAtLogin
+        enableMenuRecommendations = (try? c.decodeIfPresent(Bool.self, forKey: .enableMenuRecommendations)) ?? d.enableMenuRecommendations
+        autoCleanExternalDrivesOnEject = (try? c.decodeIfPresent(Bool.self, forKey: .autoCleanExternalDrivesOnEject)) ?? d.autoCleanExternalDrivesOnEject
+
+        remindSmartCare = (try? c.decodeIfPresent(Bool.self, forKey: .remindSmartCare)) ?? d.remindSmartCare
+        smartCareReminderFrequency = (try? c.decodeIfPresent(ReminderFrequency.self, forKey: .smartCareReminderFrequency)) ?? d.smartCareReminderFrequency
+        remindScreenCleaning = (try? c.decodeIfPresent(Bool.self, forKey: .remindScreenCleaning)) ?? d.remindScreenCleaning
+        warnLowDiskSpaceGB = (try? c.decodeIfPresent(Int.self, forKey: .warnLowDiskSpaceGB)) ?? d.warnLowDiskSpaceGB
+        notifyTrashExceedsGB = (try? c.decodeIfPresent(Int.self, forKey: .notifyTrashExceedsGB)) ?? d.notifyTrashExceedsGB
+        notifyLowRAM = (try? c.decodeIfPresent(Bool.self, forKey: .notifyLowRAM)) ?? d.notifyLowRAM
+        notifyHeavyChrome = (try? c.decodeIfPresent(Bool.self, forKey: .notifyHeavyChrome)) ?? d.notifyHeavyChrome
+        notifyHungApps = (try? c.decodeIfPresent(Bool.self, forKey: .notifyHungApps)) ?? d.notifyHungApps
+        notifyTrashedApps = (try? c.decodeIfPresent(Bool.self, forKey: .notifyTrashedApps)) ?? d.notifyTrashedApps
+        notifyBluetoothLowBattery = (try? c.decodeIfPresent(Bool.self, forKey: .notifyBluetoothLowBattery)) ?? d.notifyBluetoothLowBattery
+
+        ignoredItems = (try? c.decodeIfPresent([IgnoredItem].self, forKey: .ignoredItems)) ?? d.ignoredItems
+        favoriteToolIDs = (try? c.decodeIfPresent([String].self, forKey: .favoriteToolIDs)) ?? d.favoriteToolIDs
+    }
 }

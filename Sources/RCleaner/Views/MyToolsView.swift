@@ -44,30 +44,39 @@ public struct MyToolsView: View {
         let others = filtered.filter { !appState.settings.favoriteToolIDs.contains($0.id) }
 
         VStack(spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("My Tools")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                    Text("Quick tools for focused tasks — clean up, protect, and maintain your Mac in just a few clicks.")
-                        .font(.system(size: 13))
-                        .foregroundStyle(.white.opacity(0.7))
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("My Tools")
+                            .font(.system(size: 30, weight: .bold, design: .rounded))
+                            .foregroundStyle(.white)
+                        Text("Quick tools for focused tasks — clean up, protect, and maintain your Mac in just a few clicks.")
+                            .font(.system(size: 13))
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
+                    Spacer(minLength: 265) // Keeps title clear of top-right Voice AI + Assistant pills
                 }
-                Spacer()
-                HStack(spacing: 6) {
+
+                HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.6))
-                    TextField("Search tools...", text: $searchText)
+                    TextField("Search tools (e.g. ai, ram, duplicates, screen)...", text: $searchText)
                         .textFieldStyle(.plain)
                         .font(.system(size: 13))
-                        .frame(width: 190)
+                        .frame(maxWidth: 320)
+                    if !searchText.isEmpty {
+                        Button { searchText = "" } label: {
+                            Image(systemName: "xmark.circle.fill").foregroundStyle(.white.opacity(0.5))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(Capsule().fill(Color.white.opacity(0.12)))
-                .padding(.trailing, 130) // Space for top-right Assistant pill
+                .padding(.vertical, 7)
+                .background(Capsule().fill(Color.white.opacity(0.11)))
+                .overlay(Capsule().strokeBorder(Color.white.opacity(0.16), lineWidth: 1))
             }
             .padding(.horizontal, 28)
-            .padding(.top, 20)
+            .padding(.top, 16)
             .padding(.bottom, 14)
 
             ScrollView {

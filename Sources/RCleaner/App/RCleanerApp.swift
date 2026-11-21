@@ -10,6 +10,17 @@ public final class RCleanerAppDelegate: NSObject, NSApplicationDelegate {
     public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false // Keep Menu Bar Monitor alive when main window closes
     }
+
+    public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            NSApp.activate(ignoringOtherApps: true)
+            for win in sender.windows where win.canBecomeMain {
+                win.makeKeyAndOrderFront(nil)
+                return true
+            }
+        }
+        return true
+    }
 }
 
 @main
@@ -20,7 +31,7 @@ public struct RCleanerApp: App {
     public init() {}
 
     public var body: some Scene {
-        WindowGroup("R-Cleaner") {
+        WindowGroup("R-Cleaner", id: "main") {
             MainWindowView()
                 .environmentObject(appState)
         }
@@ -36,7 +47,7 @@ public struct RCleanerApp: App {
                     ])
                 }
             }
-            CommandGroup(after: .appSettings) {
+            CommandGroup(replacing: .appSettings) {
                 Button("Settings...") {
                     appState.showSettingsWindow = true
                 }

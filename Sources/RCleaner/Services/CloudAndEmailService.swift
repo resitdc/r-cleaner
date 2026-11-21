@@ -65,6 +65,7 @@ public final class CloudAndEmailService {
         var count = 0
 
         for case let url as URL in en {
+            if Task.isCancelled { break }
             count += 1
             if count > 4000 { break }
             if count % 250 == 0 {
@@ -178,6 +179,7 @@ public final class CloudAndEmailService {
         var scanned = 0
 
         for case let fileURL as URL in en {
+            if Task.isCancelled { break }
             guard fileURL.pathExtension == "emlx" else { continue }
             scanned += 1
             if scanned > 400 { break }

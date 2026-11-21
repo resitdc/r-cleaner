@@ -7,7 +7,8 @@ public final class AssistantService {
     private let ioQueue = DispatchQueue(label: "com.resitdc.rcleaner.persistence", qos: .utility)
 
     public init() {
-        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support", isDirectory: true)
         self.supportFolderURL = appSupport.appendingPathComponent("R-Cleaner", isDirectory: true)
         self.settingsURL = supportFolderURL.appendingPathComponent("settings.json")
         self.statsURL = supportFolderURL.appendingPathComponent("activity_stats.json")

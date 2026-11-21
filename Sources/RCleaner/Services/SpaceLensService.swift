@@ -40,6 +40,7 @@ public final class SpaceLensService {
         var totalSize: Int64 = 0
 
         for (idx, childURL) in contents.enumerated() {
+            if Task.isCancelled { break }
             if depth == 0 {
                 progress("Measuring \(childURL.lastPathComponent)...", 0.15 + (Double(idx) / Double(max(1, contents.count))) * 0.80)
             }

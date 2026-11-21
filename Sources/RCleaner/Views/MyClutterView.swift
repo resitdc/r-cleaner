@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import ImageIO
 
 public struct MyClutterView: View {
     @EnvironmentObject var appState: AppState
@@ -326,17 +327,8 @@ public struct MyClutterView: View {
                                                 let img = appState.clutterResult.similarImageGroups[gIdx].images[iIdx]
                                                 VStack(alignment: .leading, spacing: 6) {
                                                     ZStack(alignment: .topTrailing) {
-                                                        if let nsImg = NSImage(contentsOfFile: img.path) {
-                                                            Image(nsImage: nsImg)
-                                                                .resizable()
-                                                                .aspectRatio(contentMode: .fill)
-                                                                .frame(width: 140, height: 100)
-                                                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                                        } else {
-                                                            RoundedRectangle(cornerRadius: 10)
-                                                                .fill(Color.white.opacity(0.1))
-                                                                .frame(width: 140, height: 100)
-                                                        }
+                                                        AsyncThumbnailView(path: img.path, size: CGSize(width: 140, height: 100))
+                                                            .clipShape(RoundedRectangle(cornerRadius: 10))
                                                         if img.isBestToKeep {
                                                             Text("Best to Keep")
                                                                 .font(.system(size: 9, weight: .bold))
@@ -517,6 +509,57 @@ public struct MyClutterView: View {
             appState.clutterSummary = res
             appState.clutterStage = .complete
             appState.refreshTelemetry(includeHeavy: true)
+        }
+    }
+}
+
+/// Decodes photo thumbnails asynchronously off the Main Thread using ImageIO and caches them in memory.
+private struct AsyncThumbnailView: View {
+    let path: String
+    let size: CGSize
+    @State private var image: NSImage? = nil
+
+    private static let cache: NSCache<NSString, NSImage> = {
+        let c = NSCache<NSString, NSImage>()
+        c.countLimit = 180
+        return c
+    }()
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } else {
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.white.opacity(0.08))
+                    .overlay(Image(systemName: "photo").foregroundStyle(.white.opacity(0.3)))
+            }
+        }
+        .frame(width: size.width, height: size.height)
+        .task(id: path) {
+            if let cached = Self.cache.object(forKey: path as NSString) {
+                self.image = cached
+                return
+            }
+            let targetPath = path
+            let maxDim = Int(max(size.width, size.height) * 2)
+            let decodedCG: CGImage? = await Task.detached(priority: .utility) {
+                let url = URL(fileURLWithPath: targetPath)
+                guard let src = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+                let opts: [CFString: Any] = [
+                    kCGImageSourceCreateThumbnailFromImageAlways: true,
+                    kCGImageSourceThumbnailMaxPixelSize: maxDim,
+                    kCGImageSourceCreateThumbnailWithTransform: true
+                ]
+                return CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
+            }.value
+            if let cg = decodedCG {
+                let nsImg = NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
+                Self.cache.setObject(nsImg, forKey: targetPath as NSString)
+                self.image = nsImg
+            }
         }
     }
 }

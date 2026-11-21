@@ -2,6 +2,7 @@ import Foundation
 import CryptoKit
 import AppKit
 import CoreGraphics
+import ImageIO
 
 public struct ClutterScanResult {
     public var duplicateGroups: [DuplicateGroup] = []
@@ -87,7 +88,7 @@ public final class ClutterScannerService {
             ) else { continue }
 
             for case let url as URL in en {
-                if results.count >= maxFiles { return results }
+                if Task.isCancelled || results.count >= maxFiles { return results }
                 guard let vals = try? url.resourceValues(forKeys: Set(keys)),
                       vals.isRegularFile == true,
                       let size = vals.fileSize, size > 1024 else { continue }
@@ -169,7 +170,7 @@ public final class ClutterScannerService {
     private func quickHash(url: URL, maxBytes: Int) -> String? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
-        let data = handle.readData(ofLength: maxBytes)
+        guard let data = try? handle.read(upToCount: maxBytes), !data.isEmpty else { return nil }
         return SHA256.hash(data: data).compactMap { String(format: "%02x", $0) }.joined()
     }
 
@@ -178,11 +179,12 @@ public final class ClutterScannerService {
         defer { try? handle.close() }
         var hasher = SHA256()
         while autoreleasepool(invoking: {
-            let chunk = handle.readData(ofLength: 256 * 1024)
-            if chunk.isEmpty { return false }
+            if Task.isCancelled { return false }
+            guard let chunk = try? handle.read(upToCount: 256 * 1024), !chunk.isEmpty else { return false }
             hasher.update(data: chunk)
             return true
         }) {}
+        if Task.isCancelled { return nil }
         return hasher.finalize().compactMap { String(format: "%02x", $0) }.joined()
     }
 
@@ -266,10 +268,22 @@ public final class ClutterScannerService {
     }
 
     private func computeImageFingerprint(url: URL) -> (dHash: UInt64, width: Int, height: Int, sharpness: Double)? {
-        guard let nsImage = NSImage(contentsOf: url),
-              let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+        // Use thread-safe ImageIO thumbnail decoding (tiny RAM footprint vs decoding full multi-MP NSImage)
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let origW = (props?[kCGImagePropertyPixelWidth] as? Int) ?? 0
+        let origH = (props?[kCGImagePropertyPixelHeight] as? Int) ?? 0
+
+        let thumbOpts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: 64,
+            kCGImageSourceCreateThumbnailWithTransform: true
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOpts as CFDictionary) else {
             return nil
         }
+        let finalW = origW > 0 ? origW : cgImage.width
+        let finalH = origH > 0 ? origH : cgImage.height
 
         // Render into a tiny 9x8 grayscale bitmap for 64-bit difference hash (dHash)
         let w = 9
@@ -302,7 +316,7 @@ public final class ClutterScannerService {
             }
         }
         let avgGradient = gradientSum / 64.0
-        return (hash, cgImage.width, cgImage.height, avgGradient)
+        return (hash, finalW, finalH, avgGradient)
     }
 
     // MARK: - 3. Large & Old Files

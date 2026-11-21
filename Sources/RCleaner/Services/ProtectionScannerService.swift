@@ -91,34 +91,42 @@ public final class ProtectionScannerService {
         }
 
         var threats: [MalwareThreat] = []
+        var seenThreatPaths = Set<String>()
         var scanned = 0
         let maxFilesPerRoot = mode == .quick ? 400 : (mode == .balanced ? 1400 : 4500)
 
         for (idx, root) in roots.enumerated() {
+            if Task.isCancelled { break }
             guard fm.fileExists(atPath: root) else { continue }
             progress("Checking \(root)...", 0.15 + (Double(idx) / Double(max(1, roots.count))) * 0.35)
 
             guard let entries = try? fm.contentsOfDirectory(atPath: root) else { continue }
             for name in entries.prefix(maxFilesPerRoot) {
+                if Task.isCancelled { break }
                 scanned += 1
                 let full = (root as NSString).appendingPathComponent(name)
                 if FileSystemHelpers.isIgnored(path: full, category: .malwareRemoval, settings: settings) { continue }
                 let lower = name.lowercased()
 
+                var matchedSignature = false
                 for sig in knownThreatSignatures {
                     if lower.contains(sig.token) {
-                        let size = FileSystemHelpers.fileSize(at: URL(fileURLWithPath: full))
-                        threats.append(MalwareThreat(
-                            name: sig.name,
-                            path: full,
-                            category: sig.category,
-                            severity: sig.severity,
-                            reason: "Matched known macOS \(sig.category.rawValue.lowercased()) indicator '\(sig.token)' in \(URL(fileURLWithPath: root).lastPathComponent).",
-                            sizeBytes: size
-                        ))
+                        if seenThreatPaths.insert(full).inserted {
+                            let size = FileSystemHelpers.fileSize(at: URL(fileURLWithPath: full))
+                            threats.append(MalwareThreat(
+                                name: sig.name,
+                                path: full,
+                                category: sig.category,
+                                severity: sig.severity,
+                                reason: "Matched known macOS \(sig.category.rawValue.lowercased()) indicator '\(sig.token)' in \(URL(fileURLWithPath: root).lastPathComponent).",
+                                sizeBytes: size
+                            ))
+                        }
+                        matchedSignature = true
                         break
                     }
                 }
+                if matchedSignature { continue }
 
                 // Heuristic: LaunchAgent/Daemon invoking remote curl|sh, base64 -d, or hidden /tmp binary
                 if (root.contains("LaunchAgents") || root.contains("LaunchDaemons")) && name.hasSuffix(".plist"),
@@ -127,14 +135,16 @@ public final class ProtectionScannerService {
                     if (text.contains("/tmp/") && (text.contains("curl") || text.contains("python") || text.contains("osascript")))
                         || text.contains("base64 -d")
                         || text.contains("base64 --decode") {
-                        threats.append(MalwareThreat(
-                            name: "Suspicious Persistence Agent (\(name))",
-                            path: full,
-                            category: .trojan,
-                            severity: "High",
-                            reason: "Launch plist executes obfuscated or /tmp remote shell payload.",
-                            sizeBytes: Int64(data.count)
-                        ))
+                        if seenThreatPaths.insert(full).inserted {
+                            threats.append(MalwareThreat(
+                                name: "Suspicious Persistence Agent (\(name))",
+                                path: full,
+                                category: .trojan,
+                                severity: "High",
+                                reason: "Launch plist executes obfuscated or /tmp remote shell payload.",
+                                sizeBytes: Int64(data.count)
+                            ))
+                        }
                     }
                 }
             }
@@ -503,6 +513,44 @@ public final class ProtectionScannerService {
         var ok = 0
         var fail = 0
         for t in threats where t.isSelected {
+            // Special case 1: Suspicious cronjob entry — sanitize crontab instead of calling safeRemoveItem on fake URI
+            if t.path.hasPrefix("crontab://") {
+                let targetFragment = String(t.path.dropFirst("crontab://".count))
+                let cur = FileSystemHelpers.runProcess("/usr/bin/crontab", arguments: ["-l"], timeout: 4)
+                if cur.exitCode == 0 {
+                    let filtered = cur.stdout
+                        .split(separator: "\n", omittingEmptySubsequences: false)
+                        .filter { !$0.contains(targetFragment) }
+                        .joined(separator: "\n")
+                    let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent("rcleaner-cron-\(UUID().uuidString)")
+                    defer { try? FileManager.default.removeItem(at: tempURL) }
+                    if (try? filtered.write(to: tempURL, atomically: true, encoding: .utf8)) != nil {
+                        let apply = FileSystemHelpers.runProcess("/usr/bin/crontab", arguments: [tempURL.path], timeout: 4)
+                        if apply.exitCode == 0 {
+                            ok += 1
+                            logs.append(CleanupLogEntry(moduleName: "Protection", itemName: t.name, path: t.path, sizeBytes: t.sizeBytes, status: .cleaned))
+                            continue
+                        }
+                    }
+                }
+                fail += 1
+                logs.append(CleanupLogEntry(moduleName: "Protection", itemName: t.name, path: t.path, sizeBytes: t.sizeBytes, status: .failed, errorMessage: "Unable to update user crontab automatically. Review with `crontab -e`."))
+                continue
+            }
+
+            // Special case 2: Safari Homepage Hijacker — reset only HomePage key instead of deleting all Safari preferences
+            if t.name.hasPrefix("Safari Homepage Hijacker") {
+                let reset = FileSystemHelpers.runProcess("/usr/bin/defaults", arguments: ["delete", t.path, "HomePage"], timeout: 4)
+                if reset.exitCode == 0 {
+                    ok += 1
+                    logs.append(CleanupLogEntry(moduleName: "Protection", itemName: t.name, path: t.path, sizeBytes: 0, status: .cleaned))
+                } else {
+                    fail += 1
+                    logs.append(CleanupLogEntry(moduleName: "Protection", itemName: t.name, path: t.path, sizeBytes: 0, status: .failed, errorMessage: reset.stderr.isEmpty ? "Unable to reset Safari HomePage" : reset.stderr))
+                }
+                continue
+            }
+
             if t.path.hasSuffix(".plist") && (t.path.contains("LaunchAgents") || t.path.contains("LaunchDaemons")) {
                 _ = FileSystemHelpers.runProcess("/bin/launchctl", arguments: ["unload", "-w", t.path], timeout: 4)
             }

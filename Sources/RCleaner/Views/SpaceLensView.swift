@@ -135,7 +135,11 @@ public struct SpaceLensView: View {
                 ScrollView {
                     LazyVStack(spacing: 6) {
                         ForEach(currentNode.children.prefix(80)) { child in
-                            SpaceLensRow(node: child, palette: palette) {
+                            SpaceLensRow(
+                                node: child,
+                                palette: palette,
+                                onSelectionChanged: { appState.objectWillChange.send() }
+                            ) {
                                 if child.isDirectory && !child.children.isEmpty {
                                     navigationStack.append(child)
                                 }
@@ -203,10 +207,13 @@ public struct SpaceLensView: View {
                             .font(.caption).foregroundStyle(.secondary)
                         Button("Clean Purgeable Space") {
                             showPurgeablePopover = false
-                            Task {
-                                let (_, msg) = appState.performanceService.executeSingleTask(.freeUpPurgeable)
-                                appState.showBanner(msg)
-                                appState.refreshTelemetry(includeHeavy: true)
+                            let perfService = appState.performanceService
+                            Task.detached(priority: .userInitiated) {
+                                let (_, msg) = perfService.executeSingleTask(.freeUpPurgeable)
+                                await MainActor.run {
+                                    appState.showBanner(msg)
+                                    appState.refreshTelemetry(includeHeavy: true)
+                                }
                             }
                         }
                         .buttonStyle(.borderedProminent)
@@ -316,11 +323,18 @@ public struct SpaceLensView: View {
 private struct SpaceLensRow: View {
     @ObservedObject var node: SpaceLensNode
     let palette: ModulePalette
+    let onSelectionChanged: () -> Void
     let onDrillDown: () -> Void
 
     var body: some View {
         HStack(spacing: 9) {
-            Toggle("", isOn: $node.isSelected)
+            Toggle("", isOn: Binding(
+                get: { node.isSelected },
+                set: { newVal in
+                    node.isSelected = newVal
+                    onSelectionChanged()
+                }
+            ))
                 .toggleStyle(.checkbox)
                 .labelsHidden()
                 .disabled(node.isCloudOnlyEvicted)

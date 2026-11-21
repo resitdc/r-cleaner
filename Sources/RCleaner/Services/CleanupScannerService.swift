@@ -430,7 +430,7 @@ public final class CleanupScannerService {
             let binPath = "\(macosDir)/\(mainBin)"
             if FileSystemHelpers.isIgnored(path: binPath, category: .systemJunk, settings: settings) { continue }
             guard let fh = try? FileHandle(forReadingFrom: URL(fileURLWithPath: binPath)) else { continue }
-            let header = fh.readData(ofLength: 8)
+            let header = (try? fh.read(upToCount: 8)) ?? Data()
             try? fh.close()
             guard header.count >= 4 else { continue }
             let magic = header.withUnsafeBytes { $0.load(as: UInt32.self) }
@@ -856,15 +856,17 @@ public final class CleanupScannerService {
             let pct = Double(index + 1) / Double(max(1, selected.count))
             progress("Cleaning \(item.name)...", pct)
 
-            // If this is an Ollama model manifest, remove both the manifest and its exclusive blobs
+            // If this is an Ollama model manifest, remove the manifest first and only delete blobs
+            // no longer referenced by any remaining Ollama manifest (protects shared base layers).
             if let blobsStr = item.metadata["ollamaBlobs"], !blobsStr.isEmpty {
+                let mRes = FileSystemHelpers.safeRemoveItem(at: item.path, moveToTrash: false)
+                let stillReferenced = collectReferencedOllamaBlobs()
                 let blobs = blobsStr.split(separator: "\n").map(String.init)
                 var allOK = true
-                for b in blobs {
+                for b in blobs where !stillReferenced.contains(b) {
                     let r = FileSystemHelpers.safeRemoveItem(at: b, moveToTrash: false)
                     if !r.success { allOK = false }
                 }
-                let mRes = FileSystemHelpers.safeRemoveItem(at: item.path, moveToTrash: false)
                 if mRes.success && allOK {
                     freed += item.sizeBytes
                     succeeded += 1
@@ -918,6 +920,32 @@ public final class CleanupScannerService {
     }
 
     // MARK: - Helpers
+
+    private func collectReferencedOllamaBlobs() -> Set<String> {
+        let fm = FileManager.default
+        let manifestsRoot = FileSystemHelpers.expand("~/.ollama/models/manifests")
+        let blobsRoot = FileSystemHelpers.expand("~/.ollama/models/blobs")
+        var referenced = Set<String>()
+        guard let en = fm.enumerator(at: URL(fileURLWithPath: manifestsRoot), includingPropertiesForKeys: [.isRegularFileKey]) else {
+            return referenced
+        }
+        for case let fileURL as URL in en {
+            guard (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
+                  let data = try? Data(contentsOf: fileURL),
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { continue }
+            if let layers = json["layers"] as? [[String: Any]] {
+                for layer in layers {
+                    if let digest = layer["digest"] as? String {
+                        referenced.insert("\(blobsRoot)/\(digest.replacingOccurrences(of: ":", with: "-"))")
+                    }
+                }
+            }
+            if let config = json["config"] as? [String: Any], let digest = config["digest"] as? String {
+                referenced.insert("\(blobsRoot)/\(digest.replacingOccurrences(of: ":", with: "-"))")
+            }
+        }
+        return referenced
+    }
 
     private func scanDirectChildren(
         in dirPath: String,

@@ -4,6 +4,7 @@ import XCTest
 final class RCleanerTests: XCTestCase {
     func testByteFormatting() {
         XCTAssertEqual(ByteFormat.string(0), "0 KB")
+        XCTAssertEqual(ByteFormat.string(-42), "0 KB")
         XCTAssertEqual(ByteFormat.string(512), "< 1 KB")
         XCTAssertTrue(ByteFormat.string(1_500_000).contains("MB"))
     }
@@ -20,10 +21,55 @@ final class RCleanerTests: XCTestCase {
     }
 
     func testProtectedSystemPaths() {
+        XCTAssertTrue(FileSystemHelpers.isProtectedSystemPath(""))
         XCTAssertTrue(FileSystemHelpers.isProtectedSystemPath("/System/Library/CoreServices"))
         XCTAssertTrue(FileSystemHelpers.isProtectedSystemPath("/usr/bin/swift"))
         XCTAssertTrue(FileSystemHelpers.isProtectedSystemPath("/"))
+        XCTAssertTrue(FileSystemHelpers.isProtectedSystemPath("/Applications"))
+        XCTAssertTrue(FileSystemHelpers.isProtectedSystemPath(FileSystemHelpers.expand("~/Library")))
+        XCTAssertTrue(FileSystemHelpers.isProtectedSystemPath(FileSystemHelpers.expand("~/Desktop")))
         XCTAssertFalse(FileSystemHelpers.isProtectedSystemPath("/tmp/r-cleaner-test-file"))
+        XCTAssertFalse(FileSystemHelpers.isProtectedSystemPath(FileSystemHelpers.expand("~/Downloads/example.dmg")))
+    }
+
+    func testSafeRemoveBrokenSymlink() throws {
+        let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("rcleaner-symlink-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let brokenLink = tempDir.appendingPathComponent("dangling.link")
+        try FileManager.default.createSymbolicLink(atPath: brokenLink.path, withDestinationPath: "/nonexistent/target/\(UUID().uuidString)")
+        XCTAssertNotNil(try? FileManager.default.attributesOfItem(atPath: brokenLink.path))
+
+        let res = FileSystemHelpers.safeRemoveItem(at: brokenLink.path, moveToTrash: false)
+        XCTAssertTrue(res.success)
+        XCTAssertNil(try? FileManager.default.attributesOfItem(atPath: brokenLink.path))
+    }
+
+    func testResilientSettingsDecodePreservesOldConfig() throws {
+        // Simulate legacy settings.json from an older version without Voice AI keys
+        let legacyJSON = """
+        {
+          "hasCompletedIntro": true,
+          "playSounds": false,
+          "warnLowDiskSpaceGB": 25
+        }
+        """.data(using: .utf8)!
+        let decoded = try JSONDecoder().decode(RCleanerSettings.self, from: legacyJSON)
+        XCTAssertTrue(decoded.hasCompletedIntro)
+        XCTAssertFalse(decoded.playSounds)
+        XCTAssertEqual(decoded.warnLowDiskSpaceGB, 25)
+        // New Voice AI fields gracefully receive defaults instead of failing decode
+        XCTAssertTrue(decoded.enableVoiceAssistant)
+        XCTAssertTrue(decoded.useBundledVoicePack)
+        XCTAssertEqual(decoded.voiceAddressTitle, "sir")
+    }
+
+    func testTerminateProcessSafetyGuards() {
+        let service = SystemTelemetryService()
+        XCTAssertFalse(service.terminateProcess(pid: 0))
+        XCTAssertFalse(service.terminateProcess(pid: 1))
+        XCTAssertFalse(service.terminateProcess(pid: getpid()))
     }
 
     func testDuplicateFinderDetectsExactCopies() throws {

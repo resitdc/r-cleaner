@@ -6,6 +6,7 @@ import IOKit.ps
 import CoreWLAN
 
 public final class SystemTelemetryService {
+    private let stateLock = NSLock()
     private var prevCPUTicks: (user: UInt64, system: UInt64, idle: UInt64, nice: UInt64)?
     private var prevNetBytes: (inBytes: UInt64, outBytes: UInt64, timestamp: Date)?
     private var cpuHistory: [Double] = Array(repeating: 0, count: 30)
@@ -44,6 +45,7 @@ public final class SystemTelemetryService {
             }
         }
 
+        stateLock.lock()
         if kr == KERN_SUCCESS {
             let u = UInt64(load.cpu_ticks.0)
             let s = UInt64(load.cpu_ticks.1)
@@ -68,6 +70,7 @@ public final class SystemTelemetryService {
         cpuHistory.removeFirst()
         cpuHistory.append(reading.totalLoadPercent)
         reading.history = cpuHistory
+        stateLock.unlock()
         return reading
     }
 
@@ -168,7 +171,11 @@ public final class SystemTelemetryService {
                 reading.healthPercent = min(100, max(1, Int((Double(m) / Double(d)) * 100.0)))
             }
             if let rawTemp = IORegistryEntryCreateCFProperty(service, "Temperature" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Int {
-                reading.temperatureCelsius = (Double(rawTemp) / 100.0)
+                // Apple Silicon reports centi-Celsius (e.g. 3132 -> 31.32 C); older Intel Macs may report centi-Kelvin (>20000)
+                let celsius = rawTemp > 20_000 ? (Double(rawTemp) / 100.0 - 273.15) : (Double(rawTemp) / 100.0)
+                if celsius > -20 && celsius < 110 {
+                    reading.temperatureCelsius = celsius
+                }
             }
         }
 
@@ -208,6 +215,7 @@ public final class SystemTelemetryService {
         }
 
         let now = Date()
+        stateLock.lock()
         if let prev = prevNetBytes {
             let dt = max(0.2, now.timeIntervalSince(prev.timestamp))
             let dIn = totalIn >= prev.inBytes ? Double(totalIn - prev.inBytes) : 0
@@ -216,6 +224,7 @@ public final class SystemTelemetryService {
             reading.uploadBytesPerSec = dOut / dt
         }
         prevNetBytes = (totalIn, totalOut, now)
+        stateLock.unlock()
         reading.totalDownloadedBytes = Int64(totalIn)
         reading.totalUploadedBytes = Int64(totalOut)
         reading.interfaceName = activeIface
@@ -298,6 +307,8 @@ public final class SystemTelemetryService {
     }
 
     public func terminateProcess(pid: Int32, force: Bool = false) -> Bool {
+        // Guard against killing kernel/launchd (PID <= 1) or R-Cleaner itself
+        guard pid > 1, pid != getpid() else { return false }
         if let app = NSRunningApplication(processIdentifier: pid) {
             return force ? app.forceTerminate() : app.terminate()
         }

@@ -191,11 +191,17 @@ public struct CleanupView: View {
                         palette: palette,
                         isDisabled: totalSelected == 0
                     ) {
-                        appState.runCleanupClean()
+                        triggerCleanWithSafetyCheck()
                     }
                 }
                 .padding(.vertical, 14)
             }
+        }
+        .alert(riskyCleanAlertTitle, isPresented: $showRiskyCleanAlert) {
+            Button("Cancel", role: .cancel) {}
+            Button("Continue", role: .destructive) { appState.runCleanupClean() }
+        } message: {
+            Text(riskyCleanAlertMessage)
         }
     }
 

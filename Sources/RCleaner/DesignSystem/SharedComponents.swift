@@ -484,7 +484,7 @@ public struct ModuleHeaderBar: View {
     }
 
     public var body: some View {
-        HStack {
+        HStack(spacing: 12) {
             Button(action: onBack) {
                 HStack(spacing: 6) {
                     Image(systemName: "chevron.left")
@@ -499,23 +499,27 @@ public struct ModuleHeaderBar: View {
             }
             .buttonStyle(.plain)
 
-            Spacer()
+            HStack(spacing: 8) {
+                Text(title)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
 
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(.white)
-
-            Spacer()
-
-            if let trailingText {
-                Text(trailingText)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.7))
-            } else {
-                Color.clear.frame(width: 84, height: 1)
+                if let trailingText, !trailingText.isEmpty {
+                    Text(trailingText)
+                        .font(.system(size: 11.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.76))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.white.opacity(0.08)))
+                        .lineLimit(1)
+                }
             }
+
+            Spacer(minLength: 260) // Keeps header clear of top-right Voice AI + Assistant pills
         }
-        .padding(.horizontal, 24)
+        .padding(.leading, 24)
+        .padding(.trailing, 18)
         .padding(.top, 14)
         .padding(.bottom, 8)
     }
@@ -524,6 +528,7 @@ public struct ModuleHeaderBar: View {
 // MARK: - Byte Formatter Utility
 
 public enum ByteFormat {
+    private static let lock = NSLock()
     private static let formatter: ByteCountFormatter = {
         let f = ByteCountFormatter()
         f.countStyle = .file
@@ -532,8 +537,10 @@ public enum ByteFormat {
     }()
 
     public static func string(_ bytes: Int64) -> String {
-        if bytes == 0 { return "0 KB" }
+        if bytes <= 0 { return "0 KB" }
         if bytes < 1024 { return "< 1 KB" }
+        lock.lock()
+        defer { lock.unlock() }
         return formatter.string(fromByteCount: bytes)
     }
 

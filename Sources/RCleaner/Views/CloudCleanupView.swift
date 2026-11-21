@@ -4,6 +4,7 @@ public struct CloudCleanupView: View {
     @EnvironmentObject var appState: AppState
     @State private var selectedAccountID: String? = nil
     @State private var filterLocalOnly: Bool = false
+    @State private var showCloudRemoveConfirmation: Bool = false
     private let palette = RCleanerTheme.palette(for: .cloudCleanup)
 
     public init() {}
@@ -148,7 +149,13 @@ public struct CloudCleanupView: View {
                     .font(.system(size: 12)).foregroundStyle(.white.opacity(0.65))
                 Spacer()
                 Button("Refresh Accounts") {
-                    appState.cloudAccounts = appState.cloudEmailService.discoverCloudAccounts()
+                    let service = appState.cloudEmailService
+                    Task.detached(priority: .userInitiated) {
+                        let discovered = service.discoverCloudAccounts()
+                        await MainActor.run {
+                            appState.cloudAccounts = discovered
+                        }
+                    }
                 }
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white)
@@ -251,14 +258,23 @@ public struct CloudCleanupView: View {
                     palette: palette,
                     isDisabled: selectedItems.isEmpty
                 ) {
+                    showCloudRemoveConfirmation = true
+                }
+            }
+            .padding(.vertical, 12)
+            .alert("Remove \(selectedItems.count) cloud file(s)?", isPresented: $showCloudRemoveConfirmation) {
+                Button("Cancel", role: .cancel) {}
+                Button("Remove", role: .destructive) {
                     Task {
                         let res = await appState.cloudEmailService.removeCloudItems(selectedItems)
                         appState.stats.totalCloudCleanedBytes += res.bytesFreed
                         appState.cloudSummary = res
+                        appState.refreshTelemetry(includeHeavy: true)
                     }
                 }
+            } message: {
+                Text("Removing cloud files deletes them from both this Mac and your synced cloud storage (\(ByteFormat.string(selectedBytes))). Use 'Unsync Local Copy' instead if you want to keep them in the cloud.")
             }
-            .padding(.vertical, 12)
         }
     }
 }

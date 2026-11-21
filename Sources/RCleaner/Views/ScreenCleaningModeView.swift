@@ -2,9 +2,16 @@ import SwiftUI
 import AppKit
 import CoreGraphics
 
+/// Borderless NSWindow subclass that can become key/main so Escape key presses are always received
+/// even when macOS Accessibility permission is not granted.
+private final class KeyableBorderlessWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { true }
+}
+
 /// Full-screen Screen Cleaning Mode for R-Cleaner.
 /// Dims the screen to a pure dark cleaning surface, optionally locks keyboard/mouse input
-/// when Accessibility permission is granted, and allows safe exit via Cmd+Q or holding Escape.
+/// when Accessibility permission is granted, and allows safe exit via Cmd+Q or pressing Escape.
 public final class ScreenCleaningWindowController {
     public static let shared = ScreenCleaningWindowController()
 
@@ -12,6 +19,7 @@ public final class ScreenCleaningWindowController {
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var localKeyMonitor: Any?
+    private var globalKeyMonitor: Any?
     private var completionHandler: (() -> Void)?
 
     private init() {}
@@ -35,14 +43,22 @@ public final class ScreenCleaningWindowController {
             return nil // Absorb all other keystrokes while cleaning
         }
 
+        // Global fallback monitor for Escape in case another app steals focus when Accessibility is off
+        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.keyDown]) { [weak self] event in
+            if event.keyCode == 53 {
+                Task { @MainActor in self?.dismiss() }
+            }
+        }
+
         for screen in NSScreen.screens {
-            let win = NSWindow(
+            let win = KeyableBorderlessWindow(
                 contentRect: screen.frame,
                 styleMask: [.borderless],
                 backing: .buffered,
                 defer: false,
                 screen: screen
             )
+            win.isReleasedWhenClosed = false
             win.level = .screenSaver
             win.backgroundColor = .black
             win.isOpaque = true
@@ -65,6 +81,10 @@ public final class ScreenCleaningWindowController {
             NSEvent.removeMonitor(monitor)
             localKeyMonitor = nil
         }
+        if let gMonitor = globalKeyMonitor {
+            NSEvent.removeMonitor(gMonitor)
+            globalKeyMonitor = nil
+        }
         if let src = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetCurrent(), src, .commonModes)
             runLoopSource = nil
@@ -74,7 +94,9 @@ public final class ScreenCleaningWindowController {
             eventTap = nil
         }
         for win in overlayWindows {
+            win.contentView = nil
             win.orderOut(nil)
+            win.close()
         }
         overlayWindows.removeAll()
         if let handler = completionHandler {
@@ -85,7 +107,13 @@ public final class ScreenCleaningWindowController {
 
     private func installEventTap() {
         let mask: CGEventMask = (1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.keyUp.rawValue)
-        let callback: CGEventTapCallBack = { _, type, event, userInfo in
+        let callback: CGEventTapCallBack = { _, type, event, _ in
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                if let tap = ScreenCleaningWindowController.shared.eventTap {
+                    CGEvent.tapEnable(tap: tap, enable: true)
+                }
+                return Unmanaged.passUnretained(event)
+            }
             if type == .keyDown {
                 let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
                 let flags = event.flags

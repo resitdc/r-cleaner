@@ -35,6 +35,7 @@ public struct IntroFlowView: View {
     @State private var shockwaveOpacity: Double = 0
     @State private var currentSlide: Int = 0
     @State private var hasAutoAdvanced = false
+    @State private var choreographyTask: Task<Void, Never>? = nil
 
     private let slides: [CarouselSlide] = [
         CarouselSlide(
@@ -93,10 +94,10 @@ public struct IntroFlowView: View {
 
     public var body: some View {
         ZStack {
-            // Animated cosmic GPU Canvas backdrop (active ONLY while IntroFlowView is mounted)
-            TimelineView(.animation(minimumInterval: 1.0 / 60.0)) { timeline in
+            // Animated cosmic GPU Canvas backdrop (pauses when Reduce Motion is enabled)
+            TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: appState.settings.reduceMotion)) { timeline in
                 IntroCosmicCanvas(
-                    elapsed: timeline.date.timeIntervalSince(startDate),
+                    elapsed: appState.settings.reduceMotion ? 0 : timeline.date.timeIntervalSince(startDate),
                     accentColor: activeAccent,
                     secondaryColor: activeSecondary
                 )
@@ -158,6 +159,10 @@ public struct IntroFlowView: View {
         .onAppear {
             startDate = Date()
             runCinematicChoreography()
+        }
+        .onDisappear {
+            choreographyTask?.cancel()
+            choreographyTask = nil
         }
     }
 
@@ -557,6 +562,7 @@ public struct IntroFlowView: View {
     // MARK: - Choreographed Intro Timing
 
     private func runCinematicChoreography() {
+        choreographyTask?.cancel()
         strokeProgress = 0
         fillOpacity = 0
         logoScale = 0.86
@@ -571,8 +577,10 @@ public struct IntroFlowView: View {
             strokeProgress = 1.0
         }
 
-        // Beat 2: Fill blooms + 3D spring settle + shockwave pulse
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.90) {
+        choreographyTask = Task { @MainActor in
+            // Beat 2: Fill blooms + 3D spring settle + shockwave pulse
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            guard !Task.isCancelled else { return }
             withAnimation(.spring(response: 0.75, dampingFraction: 0.72)) {
                 fillOpacity = 1.0
                 logoScale = 1.0
@@ -583,10 +591,10 @@ public struct IntroFlowView: View {
                 shockwaveScale = 1.95
                 shockwaveOpacity = 0
             }
-        }
 
-        // Beat 3: Glossy wipe sheen + title & buttons rise in
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.45) {
+            // Beat 3: Glossy wipe sheen + title & buttons rise in
+            try? await Task.sleep(nanoseconds: 550_000_000)
+            guard !Task.isCancelled else { return }
             withAnimation(.easeInOut(duration: 0.85)) {
                 shineOffset = 220
             }
