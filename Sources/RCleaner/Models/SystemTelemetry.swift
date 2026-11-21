@@ -68,6 +68,7 @@ public struct BatteryReading {
     public var healthPercent: Int = 100
     public var condition: String = "Normal"
     public var temperatureCelsius: Double? = nil
+    public var powerWatts: Double? = nil
 
     public var statusText: String {
         if !isPresent { return "AC Power" }
@@ -117,14 +118,109 @@ public struct ExternalDriveInfo: Identifiable, Hashable {
     public var junkBytes: Int64
 }
 
+public enum ThermalStateLevel: String, Codable, Sendable {
+    case nominal = "Nominal"
+    case fair = "Fair"
+    case serious = "Serious"
+    case critical = "Critical"
+
+    public var shortLabel: String {
+        switch self {
+        case .nominal: return "Cool"
+        case .fair: return "Warm"
+        case .serious: return "Hot"
+        case .critical: return "Throttling"
+        }
+    }
+
+    public var descriptionText: String {
+        switch self {
+        case .nominal: return "Cool & optimal thermal headroom"
+        case .fair: return "Slightly warm under active load"
+        case .serious: return "High thermal pressure — fans / throttling active"
+        case .critical: return "Critical heat — performance throttled"
+        }
+    }
+
+    public var accentHex: String {
+        switch self {
+        case .nominal: return "2ED573"
+        case .fair: return "FFD166"
+        case .serious: return "FF9F43"
+        case .critical: return "FF5E57"
+        }
+    }
+}
+
+public struct ThermalReading: Sendable {
+    public var state: ThermalStateLevel = .nominal
+    public var temperatureCelsius: Double? = nil
+    public var isLowPowerMode: Bool = false
+}
+
+public struct ProcessNetworkConsumer: Identifiable, Hashable, Sendable {
+    public let id: Int32 // pid
+    public let name: String
+    public let downloadBytesPerSec: Double
+    public let uploadBytesPerSec: Double
+    public let totalInBytes: Int64
+    public let totalOutBytes: Int64
+
+    public var totalRateBytesPerSec: Double {
+        downloadBytesPerSec + uploadBytesPerSec
+    }
+}
+
+public enum SmartAlertKind: String, Hashable, Sendable {
+    case lowDisk
+    case criticalRAM
+    case runawayCPU
+    case thermalPressure
+}
+
+public struct JarvisSmartAlert: Identifiable, Equatable, Sendable {
+    public let id: String
+    public let kind: SmartAlertKind
+    public let title: String
+    public let message: String
+    public let iconName: String
+    public let accentHex: String
+    public let triggeredAt: Date
+    public let processID: Int32?
+    public let processName: String?
+
+    public init(
+        kind: SmartAlertKind,
+        title: String,
+        message: String,
+        iconName: String,
+        accentHex: String,
+        triggeredAt: Date = Date(),
+        processID: Int32? = nil,
+        processName: String? = nil
+    ) {
+        self.id = kind.rawValue + (processID.map { "-\($0)" } ?? "")
+        self.kind = kind
+        self.title = title
+        self.message = message
+        self.iconName = iconName
+        self.accentHex = accentHex
+        self.triggeredAt = triggeredAt
+        self.processID = processID
+        self.processName = processName
+    }
+}
+
 public struct SystemTelemetrySnapshot {
     public var cpu = CPUReading()
     public var memory = MemoryReading()
     public var storage = StorageReading()
     public var battery = BatteryReading()
+    public var thermal = ThermalReading()
     public var network = NetworkReading()
     public var topCPUConsumers: [ProcessConsumer] = []
     public var topMemoryConsumers: [ProcessConsumer] = []
+    public var topNetworkConsumers: [ProcessNetworkConsumer] = []
     public var externalDrives: [ExternalDriveInfo] = []
     public var lastUpdated: Date = Date()
 }

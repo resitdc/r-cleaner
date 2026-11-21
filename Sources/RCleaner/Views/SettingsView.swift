@@ -332,10 +332,37 @@ public struct SettingsView: View {
                 Toggle("Remind to wipe your Mac screen (Every 2 weeks)", isOn: $appState.settings.remindScreenCleaning)
             }
 
-            Section("Thresholds & System Alerts") {
-                Stepper("Warn when free disk space < \(appState.settings.warnLowDiskSpaceGB) GB", value: $appState.settings.warnLowDiskSpaceGB, in: 5...100, step: 5)
+            Section("Jarvis Smart Alerts & Configurable Thresholds") {
+                Toggle("Enable Jarvis Smart Alerts (HUD + Voice AI)", isOn: $appState.settings.enableJarvisSmartAlerts)
+
+                Stepper("Low disk space alert below \(appState.settings.warnLowDiskSpaceGB) GB", value: $appState.settings.warnLowDiskSpaceGB, in: 1...100, step: 1)
+                    .disabled(!appState.settings.enableJarvisSmartAlerts)
+
+                Toggle("Alert when RAM pressure exceeds threshold", isOn: $appState.settings.notifyLowRAM)
+                    .disabled(!appState.settings.enableJarvisSmartAlerts)
+                if appState.settings.notifyLowRAM {
+                    Stepper("RAM pressure threshold: \(appState.settings.ramAlertThresholdPercent)%", value: $appState.settings.ramAlertThresholdPercent, in: 60...98, step: 5)
+                        .disabled(!appState.settings.enableJarvisSmartAlerts)
+                }
+
+                Toggle("Alert when a runaway process pegs CPU", isOn: $appState.settings.notifyRunawayCPU)
+                    .disabled(!appState.settings.enableJarvisSmartAlerts)
+                if appState.settings.notifyRunawayCPU {
+                    Stepper("Runaway CPU threshold: ≥ \(appState.settings.runawayCPUThresholdPercent)%", value: $appState.settings.runawayCPUThresholdPercent, in: 50...300, step: 10)
+                        .disabled(!appState.settings.enableJarvisSmartAlerts)
+                    Stepper("Sustained duration before alert: \(appState.settings.runawayCPUDurationSeconds) sec", value: $appState.settings.runawayCPUDurationSeconds, in: 15...300, step: 15)
+                        .disabled(!appState.settings.enableJarvisSmartAlerts)
+                }
+
+                Toggle("Alert on Serious / Critical thermal throttling", isOn: $appState.settings.notifyThermalPressure)
+                    .disabled(!appState.settings.enableJarvisSmartAlerts)
+
+                Stepper("Minimum cooldown between repeated alerts: \(appState.settings.smartAlertCooldownMinutes) min", value: $appState.settings.smartAlertCooldownMinutes, in: 1...60, step: 1)
+                    .disabled(!appState.settings.enableJarvisSmartAlerts)
+            }
+
+            Section("Additional System Notifications") {
                 Stepper("Notify if Trash size exceeds \(appState.settings.notifyTrashExceedsGB) GB", value: $appState.settings.notifyTrashExceedsGB, in: 1...50)
-                Toggle("Notify when too low on free RAM", isOn: $appState.settings.notifyLowRAM)
                 Toggle("Notify when Chrome uses too much memory", isOn: $appState.settings.notifyHeavyChrome)
                 Toggle("Notify about hung applications", isOn: $appState.settings.notifyHungApps)
                 Toggle("Offer to uninstall trashed applications correctly", isOn: $appState.settings.notifyTrashedApps)

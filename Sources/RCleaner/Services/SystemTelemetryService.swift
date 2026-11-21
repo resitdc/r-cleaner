@@ -9,6 +9,7 @@ public final class SystemTelemetryService {
     private let stateLock = NSLock()
     private var prevCPUTicks: (user: UInt64, system: UInt64, idle: UInt64, nice: UInt64)?
     private var prevNetBytes: (inBytes: UInt64, outBytes: UInt64, timestamp: Date)?
+    private var prevProcessNet: (samples: [Int32: (inBytes: Int64, outBytes: Int64)], timestamp: Date)?
     private var cpuHistory: [Double] = Array(repeating: 0, count: 30)
 
     public init() {}
@@ -19,15 +20,33 @@ public final class SystemTelemetryService {
         snap.memory = readMemory()
         snap.storage = readStorage()
         snap.battery = readBattery()
+        snap.thermal = readThermal(batteryTemp: snap.battery.temperatureCelsius)
         snap.network = readNetwork()
         if includeProcessesAndDrives {
             let (topCPU, topMem) = readTopProcesses()
             snap.topCPUConsumers = topCPU
             snap.topMemoryConsumers = topMem
+            snap.topNetworkConsumers = readPerAppNetworkBandwidth()
             snap.externalDrives = readExternalDrives()
         }
         snap.lastUpdated = Date()
         return snap
+    }
+
+    // MARK: - Thermal Pressure (ProcessInfo.thermalState + Low Power Mode)
+
+    private func readThermal(batteryTemp: Double?) -> ThermalReading {
+        var reading = ThermalReading()
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: reading.state = .nominal
+        case .fair: reading.state = .fair
+        case .serious: reading.state = .serious
+        case .critical: reading.state = .critical
+        @unknown default: reading.state = .nominal
+        }
+        reading.temperatureCelsius = batteryTemp
+        reading.isLowPowerMode = ProcessInfo.processInfo.isLowPowerModeEnabled
+        return reading
     }
 
     // MARK: - CPU via Mach host_statistics
@@ -177,6 +196,14 @@ public final class SystemTelemetryService {
                     reading.temperatureCelsius = celsius
                 }
             }
+            if let voltageMV = IORegistryEntryCreateCFProperty(service, "Voltage" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Int,
+               let ampRaw = (IORegistryEntryCreateCFProperty(service, "InstantAmperage" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Int)
+                    ?? (IORegistryEntryCreateCFProperty(service, "Amperage" as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() as? Int) {
+                let watts = abs(Double(voltageMV) * Double(ampRaw)) / 1_000_000.0
+                if watts > 0.1 && watts < 250 {
+                    reading.powerWatts = watts
+                }
+            }
         }
 
         return reading
@@ -274,6 +301,82 @@ public final class SystemTelemetryService {
         }
     }
 
+    // MARK: - Per-App Live Bandwidth via macOS nettop
+
+    /// Parses `/usr/bin/nettop -P -L 1 -J bytes_in,bytes_out -x` CSV output into `(pid, name, inBytes, outBytes)`.
+    public static func parseNettopOutput(_ output: String) -> [(pid: Int32, name: String, inBytes: Int64, outBytes: Int64)] {
+        var rows: [(pid: Int32, name: String, inBytes: Int64, outBytes: Int64)] = []
+        for rawLine in output.split(whereSeparator: \.isNewline) {
+            let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !line.isEmpty, !line.hasPrefix(",") else { continue }
+            let cols = line.split(separator: ",", omittingEmptySubsequences: false)
+            guard cols.count >= 3 else { continue }
+
+            let procToken = String(cols[0])
+            guard let dotIdx = procToken.lastIndex(of: ".") else { continue }
+            let name = String(procToken[..<dotIdx]).trimmingCharacters(in: .whitespaces)
+            let pidStr = String(procToken[procToken.index(after: dotIdx)...])
+            guard let pid = Int32(pidStr), !name.isEmpty,
+                  let bytesIn = Int64(cols[1].trimmingCharacters(in: .whitespaces)),
+                  let bytesOut = Int64(cols[2].trimmingCharacters(in: .whitespaces)) else { continue }
+            rows.append((pid, name, bytesIn, bytesOut))
+        }
+        return rows
+    }
+
+    private func readPerAppNetworkBandwidth() -> [ProcessNetworkConsumer] {
+        let res = FileSystemHelpers.runProcess("/usr/bin/nettop", arguments: ["-P", "-L", "1", "-J", "bytes_in,bytes_out", "-x"], timeout: 3)
+        guard res.exitCode == 0 else { return [] }
+
+        let parsed = Self.parseNettopOutput(res.stdout)
+        let now = Date()
+        var currentMap: [Int32: (inBytes: Int64, outBytes: Int64)] = [:]
+        currentMap.reserveCapacity(parsed.count)
+        for row in parsed {
+            currentMap[row.pid] = (row.inBytes, row.outBytes)
+        }
+
+        stateLock.lock()
+        let prev = prevProcessNet
+        prevProcessNet = (currentMap, now)
+        stateLock.unlock()
+
+        let dt = prev.map { max(0.5, now.timeIntervalSince($0.timestamp)) } ?? 0
+        var consumers: [ProcessNetworkConsumer] = []
+        consumers.reserveCapacity(parsed.count)
+
+        for row in parsed {
+            guard row.inBytes > 0 || row.outBytes > 0 else { continue }
+            var dlRate: Double = 0
+            var ulRate: Double = 0
+            if let prevSample = prev?.samples[row.pid], dt > 0 {
+                let dIn = row.inBytes >= prevSample.inBytes ? Double(row.inBytes - prevSample.inBytes) : 0
+                let dOut = row.outBytes >= prevSample.outBytes ? Double(row.outBytes - prevSample.outBytes) : 0
+                dlRate = dIn / dt
+                ulRate = dOut / dt
+            }
+            consumers.append(ProcessNetworkConsumer(
+                id: row.pid,
+                name: row.name,
+                downloadBytesPerSec: dlRate,
+                uploadBytesPerSec: ulRate,
+                totalInBytes: row.inBytes,
+                totalOutBytes: row.outBytes
+            ))
+        }
+
+        // Prioritize processes actively transferring right now, breaking ties by total session bytes
+        return Array(consumers.sorted { a, b in
+            if (a.totalRateBytesPerSec > 0) != (b.totalRateBytesPerSec > 0) {
+                return a.totalRateBytesPerSec > b.totalRateBytesPerSec
+            }
+            if abs(a.totalRateBytesPerSec - b.totalRateBytesPerSec) > 10 {
+                return a.totalRateBytesPerSec > b.totalRateBytesPerSec
+            }
+            return (a.totalInBytes + a.totalOutBytes) > (b.totalInBytes + b.totalOutBytes)
+        }.prefix(8))
+    }
+
     // MARK: - Top Consumers (CPU & Memory)
 
     private func readTopProcesses() -> ([ProcessConsumer], [ProcessConsumer]) {
@@ -358,5 +461,123 @@ public final class SystemTelemetryService {
         } catch {
             return false
         }
+    }
+}
+
+// MARK: - Configurable Jarvis Smart Guard Evaluator
+
+/// Stateful, pure evaluator that tracks runaway CPU durations and alert cooldowns
+/// against user-configurable thresholds for Disk, RAM Pressure, Runaway CPU, and Thermal State.
+public final class JarvisSmartGuardEvaluator {
+    private var runawayStartByPID: [Int32: Date] = [:]
+    private var lastAlertTimeByKind: [SmartAlertKind: Date] = [:]
+
+    public init() {}
+
+    public func evaluate(
+        snapshot: SystemTelemetrySnapshot,
+        settings: RCleanerSettings,
+        now: Date = Date()
+    ) -> (activeAlerts: [JarvisSmartAlert], newlyTriggered: [JarvisSmartAlert]) {
+        guard settings.enableJarvisSmartAlerts else {
+            runawayStartByPID.removeAll()
+            return ([], [])
+        }
+
+        let cooldownSeconds = TimeInterval(max(1, settings.smartAlertCooldownMinutes) * 60)
+        var active: [JarvisSmartAlert] = []
+        var newlyTriggered: [JarvisSmartAlert] = []
+
+        func record(_ alert: JarvisSmartAlert) {
+            active.append(alert)
+            if let last = lastAlertTimeByKind[alert.kind], now.timeIntervalSince(last) < cooldownSeconds {
+                return
+            }
+            lastAlertTimeByKind[alert.kind] = now
+            newlyTriggered.append(alert)
+        }
+
+        // 1. Low Disk Space Guard (configurable GB threshold)
+        if snapshot.storage.totalBytes > 0 {
+            let thresholdBytes = Int64(max(1, settings.warnLowDiskSpaceGB)) * 1_000_000_000
+            if snapshot.storage.availableBytes < thresholdBytes {
+                let freeGB = Double(snapshot.storage.availableBytes) / 1_000_000_000.0
+                record(JarvisSmartAlert(
+                    kind: .lowDisk,
+                    title: "Low Disk Space",
+                    message: String(format: "Only %.1f GB free (below your %d GB alert threshold).", freeGB, settings.warnLowDiskSpaceGB),
+                    iconName: "externaldrive.badge.exclamationmark",
+                    accentHex: "FF5E57",
+                    triggeredAt: now
+                ))
+            }
+        }
+
+        // 2. RAM Pressure Guard (configurable % threshold)
+        if settings.notifyLowRAM, snapshot.memory.totalBytes > 0 {
+            let ramThreshold = Double(max(50, min(99, settings.ramAlertThresholdPercent)))
+            if snapshot.memory.pressurePercent >= ramThreshold {
+                record(JarvisSmartAlert(
+                    kind: .criticalRAM,
+                    title: "High Memory Pressure (\(Int(snapshot.memory.pressurePercent))%)",
+                    message: "Memory load exceeded your \(settings.ramAlertThresholdPercent)% threshold. Freeing RAM is recommended.",
+                    iconName: "memorychip.fill",
+                    accentHex: "A855F7",
+                    triggeredAt: now
+                ))
+            }
+        }
+
+        // 3. Runaway CPU Process Guard (configurable % threshold & sustained duration seconds)
+        if settings.notifyRunawayCPU {
+            let cpuThreshold = Double(max(20, settings.runawayCPUThresholdPercent))
+            let requiredSeconds = TimeInterval(max(5, settings.runawayCPUDurationSeconds))
+            var hotPIDs = Set<Int32>()
+
+            for proc in snapshot.topCPUConsumers where proc.id > 1 && proc.cpuPercent >= cpuThreshold {
+                hotPIDs.insert(proc.id)
+                let start = runawayStartByPID[proc.id] ?? now
+                if runawayStartByPID[proc.id] == nil {
+                    runawayStartByPID[proc.id] = start
+                }
+                let elapsed = now.timeIntervalSince(start)
+                if elapsed >= requiredSeconds {
+                    record(JarvisSmartAlert(
+                        kind: .runawayCPU,
+                        title: "Runaway Process: \(proc.name)",
+                        message: String(format: "%@ has pegged %.0f%% CPU for %ds (limit: %d%% for %ds).", proc.name, proc.cpuPercent, Int(elapsed), settings.runawayCPUThresholdPercent, settings.runawayCPUDurationSeconds),
+                        iconName: "flame.fill",
+                        accentHex: "FF6B4A",
+                        triggeredAt: now,
+                        processID: proc.id,
+                        processName: proc.name
+                    ))
+                    break // Surface the single worst runaway offender at a time
+                }
+            }
+            // Clear streaks for processes that calmed down
+            runawayStartByPID = runawayStartByPID.filter { hotPIDs.contains($0.key) }
+        } else {
+            runawayStartByPID.removeAll()
+        }
+
+        // 4. Thermal Pressure Guard (Serious / Critical)
+        if settings.notifyThermalPressure, (snapshot.thermal.state == .serious || snapshot.thermal.state == .critical) {
+            record(JarvisSmartAlert(
+                kind: .thermalPressure,
+                title: "Thermal Pressure: \(snapshot.thermal.state.rawValue)",
+                message: snapshot.thermal.state.descriptionText,
+                iconName: "thermometer.high",
+                accentHex: snapshot.thermal.state.accentHex,
+                triggeredAt: now
+            ))
+        }
+
+        return (active, newlyTriggered)
+    }
+
+    public func resetCooldowns() {
+        lastAlertTimeByKind.removeAll()
+        runawayStartByPID.removeAll()
     }
 }

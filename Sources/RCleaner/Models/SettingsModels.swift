@@ -136,13 +136,20 @@ public struct RCleanerSettings: Codable, Equatable {
     public var enableMenuRecommendations: Bool = true
     public var autoCleanExternalDrivesOnEject: Bool = false
 
-    // Notifications
+    // Notifications & Jarvis Smart Alerts (All Thresholds User-Configurable)
     public var remindSmartCare: Bool = true
     public var smartCareReminderFrequency: ReminderFrequency = .weekly
     public var remindScreenCleaning: Bool = false
-    public var warnLowDiskSpaceGB: Int = 15
+    public var enableJarvisSmartAlerts: Bool = true
+    public var warnLowDiskSpaceGB: Int = 8
     public var notifyTrashExceedsGB: Int = 2
     public var notifyLowRAM: Bool = true
+    public var ramAlertThresholdPercent: Int = 85
+    public var notifyRunawayCPU: Bool = true
+    public var runawayCPUThresholdPercent: Int = 90
+    public var runawayCPUDurationSeconds: Int = 60
+    public var notifyThermalPressure: Bool = true
+    public var smartAlertCooldownMinutes: Int = 10
     public var notifyHeavyChrome: Bool = true
     public var notifyHungApps: Bool = true
     public var notifyTrashedApps: Bool = true
@@ -213,9 +220,16 @@ public struct RCleanerSettings: Codable, Equatable {
         remindSmartCare = (try? c.decodeIfPresent(Bool.self, forKey: .remindSmartCare)) ?? d.remindSmartCare
         smartCareReminderFrequency = (try? c.decodeIfPresent(ReminderFrequency.self, forKey: .smartCareReminderFrequency)) ?? d.smartCareReminderFrequency
         remindScreenCleaning = (try? c.decodeIfPresent(Bool.self, forKey: .remindScreenCleaning)) ?? d.remindScreenCleaning
+        enableJarvisSmartAlerts = (try? c.decodeIfPresent(Bool.self, forKey: .enableJarvisSmartAlerts)) ?? d.enableJarvisSmartAlerts
         warnLowDiskSpaceGB = (try? c.decodeIfPresent(Int.self, forKey: .warnLowDiskSpaceGB)) ?? d.warnLowDiskSpaceGB
         notifyTrashExceedsGB = (try? c.decodeIfPresent(Int.self, forKey: .notifyTrashExceedsGB)) ?? d.notifyTrashExceedsGB
         notifyLowRAM = (try? c.decodeIfPresent(Bool.self, forKey: .notifyLowRAM)) ?? d.notifyLowRAM
+        ramAlertThresholdPercent = (try? c.decodeIfPresent(Int.self, forKey: .ramAlertThresholdPercent)) ?? d.ramAlertThresholdPercent
+        notifyRunawayCPU = (try? c.decodeIfPresent(Bool.self, forKey: .notifyRunawayCPU)) ?? d.notifyRunawayCPU
+        runawayCPUThresholdPercent = (try? c.decodeIfPresent(Int.self, forKey: .runawayCPUThresholdPercent)) ?? d.runawayCPUThresholdPercent
+        runawayCPUDurationSeconds = (try? c.decodeIfPresent(Int.self, forKey: .runawayCPUDurationSeconds)) ?? d.runawayCPUDurationSeconds
+        notifyThermalPressure = (try? c.decodeIfPresent(Bool.self, forKey: .notifyThermalPressure)) ?? d.notifyThermalPressure
+        smartAlertCooldownMinutes = (try? c.decodeIfPresent(Int.self, forKey: .smartAlertCooldownMinutes)) ?? d.smartAlertCooldownMinutes
         notifyHeavyChrome = (try? c.decodeIfPresent(Bool.self, forKey: .notifyHeavyChrome)) ?? d.notifyHeavyChrome
         notifyHungApps = (try? c.decodeIfPresent(Bool.self, forKey: .notifyHungApps)) ?? d.notifyHungApps
         notifyTrashedApps = (try? c.decodeIfPresent(Bool.self, forKey: .notifyTrashedApps)) ?? d.notifyTrashedApps

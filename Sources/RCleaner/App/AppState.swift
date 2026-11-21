@@ -55,6 +55,9 @@ public final class AppState: ObservableObject {
     @Published public var healthScore: Int = 92
     @Published public var healthRating: MacHealthRating = .excellent
     @Published public var recommendations: [AssistantRecommendation] = []
+    @Published public var activeSmartAlerts: [JarvisSmartAlert] = []
+    private let smartGuard = JarvisSmartGuardEvaluator()
+    private var dismissedAlertIDs: Set<String> = []
 
     // Smart Care State
     @Published public var smartCareStage: ModuleStage = .intro
@@ -306,6 +309,7 @@ public final class AppState: ObservableObject {
                 if !includeHeavy {
                     merged.topCPUConsumers = self.telemetry.topCPUConsumers
                     merged.topMemoryConsumers = self.telemetry.topMemoryConsumers
+                    merged.topNetworkConsumers = self.telemetry.topNetworkConsumers
                     merged.externalDrives = self.telemetry.externalDrives
                 }
                 merged.network.lastSpeedTestMbps = self.telemetry.network.lastSpeedTestMbps
@@ -313,8 +317,34 @@ public final class AppState: ObservableObject {
                 self.telemetry = merged
                 self.isRefreshingTelemetry = false
                 self.refreshHealthScore()
+                self.evaluateSmartGuardAlerts(snapshot: merged)
             }
         }
+    }
+
+    private func evaluateSmartGuardAlerts(snapshot: SystemTelemetrySnapshot) {
+        let (active, newlyTriggered) = smartGuard.evaluate(snapshot: snapshot, settings: settings)
+        let activeIDs = Set(active.map(\.id))
+        // Re-arm dismissed IDs once the condition clears
+        dismissedAlertIDs = dismissedAlertIDs.intersection(activeIDs)
+        activeSmartAlerts = active.filter { !dismissedAlertIDs.contains($0.id) }
+
+        guard let firstNew = newlyTriggered.first else { return }
+        showBanner("\(firstNew.title): \(firstNew.message)")
+
+        if settings.enableVoiceAssistant && !voiceService.isSpeaking && !voiceCommandService.isListening {
+            switch firstNew.kind {
+            case .lowDisk:
+                playVoiceCue(.briefingStorageLow)
+            case .criticalRAM, .runawayCPU, .thermalPressure:
+                playVoiceCue(.briefingPerfHeavy)
+            }
+        }
+    }
+
+    public func dismissSmartAlert(_ alert: JarvisSmartAlert) {
+        dismissedAlertIDs.insert(alert.id)
+        activeSmartAlerts.removeAll { $0.id == alert.id }
     }
 
     public func runNetworkSpeedTest() {

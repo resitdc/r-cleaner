@@ -300,6 +300,68 @@ final class RCleanerTests: XCTestCase {
         }
     }
 
+    func testNetworkBandwidthParserAndConfigurableSmartGuardAlerts() {
+        // 1. Parse real macOS nettop CSV output
+        let sampleNettop = """
+        ,bytes_in,bytes_out,
+        apsd.349,4677,29835,
+        Google Chrome.1204,1048576,262144,
+        mDNSResponder.426,1001047,212010,
+        """
+        let parsed = SystemTelemetryService.parseNettopOutput(sampleNettop)
+        XCTAssertEqual(parsed.count, 3)
+        XCTAssertEqual(parsed[1].name, "Google Chrome")
+        XCTAssertEqual(parsed[1].pid, 1204)
+        XCTAssertEqual(parsed[1].inBytes, 1_048_576)
+        XCTAssertEqual(parsed[1].outBytes, 262_144)
+
+        // 2. Verify configurable Jarvis Smart Guard thresholds & runaway CPU sustained duration
+        let evaluator = JarvisSmartGuardEvaluator()
+        var settings = RCleanerSettings()
+        settings.enableJarvisSmartAlerts = true
+        settings.warnLowDiskSpaceGB = 8
+        settings.ramAlertThresholdPercent = 85
+        settings.runawayCPUThresholdPercent = 90
+        settings.runawayCPUDurationSeconds = 60
+        settings.notifyThermalPressure = true
+        settings.smartAlertCooldownMinutes = 10
+
+        var snap = SystemTelemetrySnapshot()
+        snap.storage.totalBytes = 500_000_000_000
+        snap.storage.availableBytes = 6_000_000_000 // 6 GB (< 8 GB threshold!)
+        snap.memory.totalBytes = 16_000_000_000
+        snap.memory.activeBytes = 14_400_000_000 // 90% (>= 85% threshold!)
+        snap.thermal.state = .serious
+        snap.topCPUConsumers = [
+            ProcessConsumer(id: 9999, name: "RunawayEncoder", cpuPercent: 115.0, memoryBytes: 500_000_000, isNotResponding: false)
+        ]
+
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        let r0 = evaluator.evaluate(snapshot: snap, settings: settings, now: t0)
+        // At t=0: lowDisk, criticalRAM, thermalPressure fire; runawayCPU must NOT fire yet (needs 60s)
+        XCTAssertTrue(r0.newlyTriggered.contains { $0.kind == .lowDisk })
+        XCTAssertTrue(r0.newlyTriggered.contains { $0.kind == .criticalRAM })
+        XCTAssertTrue(r0.newlyTriggered.contains { $0.kind == .thermalPressure })
+        XCTAssertFalse(r0.newlyTriggered.contains { $0.kind == .runawayCPU })
+
+        // At t=30s: still under 60s duration -> runawayCPU still silent, others suppressed by cooldown
+        let r30 = evaluator.evaluate(snapshot: snap, settings: settings, now: t0.addingTimeInterval(30))
+        XCTAssertTrue(r30.newlyTriggered.isEmpty)
+
+        // At t=65s: runawayCPU crosses 60s sustained duration and fires!
+        let r65 = evaluator.evaluate(snapshot: snap, settings: settings, now: t0.addingTimeInterval(65))
+        XCTAssertEqual(r65.newlyTriggered.map(\.kind), [.runawayCPU])
+        XCTAssertEqual(r65.newlyTriggered.first?.processName, "RunawayEncoder")
+
+        // Raise thresholds above current values -> active alerts clear cleanly
+        settings.warnLowDiskSpaceGB = 4
+        settings.ramAlertThresholdPercent = 95
+        settings.runawayCPUThresholdPercent = 150
+        settings.notifyThermalPressure = false
+        let rCleared = evaluator.evaluate(snapshot: snap, settings: settings, now: t0.addingTimeInterval(70))
+        XCTAssertTrue(rCleared.activeAlerts.isEmpty)
+    }
+
     func testAssistantHealthScoring() {
         let assistant = AssistantService()
         var telemetry = SystemTelemetrySnapshot()

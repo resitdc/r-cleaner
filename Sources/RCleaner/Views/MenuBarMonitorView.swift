@@ -8,25 +8,68 @@ public struct MenuBarMonitorView: View {
     @State private var expandedCard: DetailCard? = nil
 
     enum DetailCard: String {
-        case storage, protection, memory, cpu, battery, network, drives
+        case storage, protection, memory, cpu, battery, network, drives, alerts
     }
 
     public init() {}
 
     public var body: some View {
+        let thermal = appState.telemetry.thermal
+        let thermalTint = Color(hex: thermal.state.accentHex)
+
         VStack(spacing: 0) {
-            // Header
-            HStack {
-                HStack(spacing: 8) {
+            // Header with Health Score, Live Thermal Pill & Smart Alerts Button
+            HStack(spacing: 6) {
+                HStack(spacing: 7) {
                     ResitdcLogoMark(height: 16, glow: false)
-                    Text("R-Cleaner Menu")
+                    Text("R-Cleaner")
                         .font(.system(size: 13, weight: .bold))
                 }
+
                 Spacer()
-                Text("Health: \(appState.healthScore)%")
-                    .font(.system(size: 11, weight: .semibold))
+
+                // Live Thermal State Pill
+                Button {
+                    expandedCard = .battery
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: thermal.state == .nominal ? "thermometer.low" : "thermometer.high")
+                            .font(.system(size: 9.5, weight: .bold))
+                        Text(thermal.state.shortLabel)
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(thermalTint)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill(thermalTint.opacity(0.16)))
+                }
+                .buttonStyle(.plain)
+                .help("Thermal Pressure: \(thermal.state.rawValue) — \(thermal.state.descriptionText)")
+
+                // Jarvis Smart Alerts Config / Active Bell
+                Button {
+                    expandedCard = (expandedCard == .alerts) ? nil : .alerts
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: appState.settings.enableJarvisSmartAlerts ? "bell.badge.fill" : "bell.slash")
+                            .font(.system(size: 10.5, weight: .semibold))
+                        if !appState.activeSmartAlerts.isEmpty {
+                            Text("\(appState.activeSmartAlerts.count)")
+                                .font(.system(size: 9.5, weight: .bold))
+                        }
+                    }
+                    .foregroundStyle(!appState.activeSmartAlerts.isEmpty ? Color(hex: "FF5E57") : (appState.settings.enableJarvisSmartAlerts ? Color(hex: "36E2F8") : .secondary))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(Capsule().fill((!appState.activeSmartAlerts.isEmpty ? Color(hex: "FF5E57") : Color.secondary).opacity(0.16)))
+                }
+                .buttonStyle(.plain)
+                .help("Configure Jarvis Smart Alerts thresholds")
+
+                Text("\(appState.healthScore)%")
+                    .font(.system(size: 10.5, weight: .bold))
                     .foregroundStyle(Color(hex: "2ED573"))
-                    .padding(.horizontal, 8)
+                    .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(Capsule().fill(Color(hex: "2ED573").opacity(0.18)))
             }
@@ -89,6 +132,68 @@ public struct MenuBarMonitorView: View {
     private var overviewGrid: some View {
         let t = appState.telemetry
         return VStack(spacing: 10) {
+            // Active Jarvis Smart Alerts Strip (only visible when a configured threshold trips)
+            if !appState.activeSmartAlerts.isEmpty {
+                VStack(spacing: 6) {
+                    ForEach(appState.activeSmartAlerts) { alert in
+                        let alertTint = Color(hex: alert.accentHex)
+                        HStack(spacing: 8) {
+                            Image(systemName: alert.iconName)
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(alertTint)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(alert.title)
+                                    .font(.system(size: 11.5, weight: .bold))
+                                Text(alert.message)
+                                    .font(.system(size: 10))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(2)
+                            }
+                            Spacer(minLength: 4)
+                            switch alert.kind {
+                            case .criticalRAM:
+                                Button("Free RAM") { appState.quickFreeUpRAM() }
+                                    .controlSize(.mini)
+                                    .buttonStyle(.borderedProminent)
+                            case .lowDisk:
+                                Button("Sweep") {
+                                    appState.selectedModule = .devAISweeper
+                                    openMainWindow()
+                                }
+                                .controlSize(.mini)
+                                .buttonStyle(.borderedProminent)
+                            case .runawayCPU:
+                                if let pid = alert.processID {
+                                    Button("Quit") {
+                                        _ = appState.telemetryService.terminateProcess(pid: pid)
+                                        appState.dismissSmartAlert(alert)
+                                        appState.refreshTelemetry(includeHeavy: true)
+                                    }
+                                    .controlSize(.mini)
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(.red)
+                                }
+                            case .thermalPressure:
+                                Button("Inspect") { expandedCard = .cpu }
+                                    .controlSize(.mini)
+                                    .buttonStyle(.bordered)
+                            }
+                            Button {
+                                appState.dismissSmartAlert(alert)
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(9)
+                        .background(RoundedRectangle(cornerRadius: 11).fill(alertTint.opacity(0.14)))
+                        .overlay(RoundedRectangle(cornerRadius: 11).strokeBorder(alertTint.opacity(0.35), lineWidth: 1))
+                    }
+                }
+            }
+
             // Storage + Protection Row
             HStack(spacing: 10) {
                 monitorCard(
@@ -143,25 +248,39 @@ public struct MenuBarMonitorView: View {
                 )
             }
 
-            // Battery + Network Row
+            // Battery & Thermal + Live Network Guard Row
             HStack(spacing: 10) {
+                let thermalSuffix = "Thermal: \(t.thermal.state.shortLabel)"
+                let batSub: String = {
+                    if t.battery.isPresent {
+                        let wStr = t.battery.powerWatts.map { String(format: " • %.1fW", $0) } ?? ""
+                        return "Health \(t.battery.healthPercent)% • \(t.battery.cycleCount) cyc\(wStr)\n\(thermalSuffix)"
+                    }
+                    return "AC Power • \(thermalSuffix)"
+                }()
+
                 monitorCard(
-                    title: "Battery",
-                    icon: t.battery.isCharging ? "battery.100.bolt" : "battery.75",
-                    tint: Color(hex: "34D399"),
-                    value: t.battery.isPresent ? "\(t.battery.percentage)%" : "AC",
-                    subtitle: t.battery.isPresent ? "Health \(t.battery.healthPercent)% • \(t.battery.cycleCount) cyc" : "Desktop Power",
+                    title: "Battery & Thermal",
+                    icon: t.battery.isCharging ? "battery.100.bolt" : "thermometer.medium",
+                    tint: Color(hex: t.thermal.state == .nominal ? "34D399" : t.thermal.state.accentHex),
+                    value: t.battery.isPresent ? "\(t.battery.percentage)%" : t.thermal.state.shortLabel,
+                    subtitle: batSub,
                     actionTitle: nil,
                     onAction: {},
                     onTap: { expandedCard = .battery }
                 )
 
+                let topNetApp = t.topNetworkConsumers.first(where: { $0.totalRateBytesPerSec > 0 }) ?? t.topNetworkConsumers.first
+                let netSub = topNetApp != nil
+                    ? "↑ \(ByteFormat.speed(t.network.uploadBytesPerSec)) • \(topNetApp!.name)"
+                    : "↑ \(ByteFormat.speed(t.network.uploadBytesPerSec)) • \(t.network.connectionType)"
+
                 monitorCard(
-                    title: "Network",
-                    icon: "wifi",
+                    title: "Network Guard",
+                    icon: "network",
                     tint: Color(hex: "60A5FA"),
                     value: ByteFormat.speed(t.network.downloadBytesPerSec),
-                    subtitle: "↑ \(ByteFormat.speed(t.network.uploadBytesPerSec)) • \(t.network.connectionType)",
+                    subtitle: netSub,
                     actionTitle: t.network.isTestingSpeed ? "Testing..." : "Test Speed",
                     onAction: { appState.runNetworkSpeedTest() },
                     onTap: { expandedCard = .network }
@@ -361,23 +480,45 @@ public struct MenuBarMonitorView: View {
                 }
 
             case .battery:
-                Text("Battery Details").font(.headline)
-                detailRow("Status", t.battery.statusText)
-                detailRow("Charge Level", "\(t.battery.percentage)%")
-                detailRow("Health Capacity", "\(t.battery.healthPercent)%")
-                detailRow("Cycle Count", "\(t.battery.cycleCount)")
-                detailRow("Condition", t.battery.condition)
+                Text("Battery & Thermal Guard").font(.headline)
+                HStack(spacing: 8) {
+                    Circle()
+                        .fill(Color(hex: t.thermal.state.accentHex))
+                        .frame(width: 9, height: 9)
+                    Text("Thermal Pressure: \(t.thermal.state.rawValue)")
+                        .font(.callout.bold())
+                    Spacer()
+                    if t.thermal.isLowPowerMode {
+                        Text("Low Power")
+                            .font(.caption2.bold())
+                            .padding(.horizontal, 6).padding(.vertical, 2)
+                            .background(Capsule().fill(Color.yellow.opacity(0.22)))
+                    }
+                }
+                Text(t.thermal.state.descriptionText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 if let temp = t.battery.temperatureCelsius {
-                    detailRow("Temperature", String(format: "%.1f °C", temp))
+                    detailRow("Sensor Temperature", String(format: "%.1f °C", temp))
+                }
+                if let watts = t.battery.powerWatts {
+                    detailRow(t.battery.isCharging ? "Charging Power" : "Power Draw", String(format: "%.1f W", watts))
+                }
+                Divider()
+                detailRow("Battery Status", t.battery.statusText)
+                if t.battery.isPresent {
+                    detailRow("Charge Level", "\(t.battery.percentage)%")
+                    detailRow("Battery Health", "\(t.battery.healthPercent)%")
+                    detailRow("Cycle Count", "\(t.battery.cycleCount)")
+                    detailRow("Condition", t.battery.condition)
                 }
 
             case .network:
-                Text("Network & Speed Test").font(.headline)
-                detailRow("Network", t.network.networkName)
-                detailRow("Type", t.network.connectionType)
+                Text("Live Network Guard").font(.headline)
+                detailRow("Network", "\(t.network.networkName) (\(t.network.connectionType))")
                 detailRow("Security", t.network.securityRating)
-                detailRow("Download", ByteFormat.speed(t.network.downloadBytesPerSec))
-                detailRow("Upload", ByteFormat.speed(t.network.uploadBytesPerSec))
+                detailRow("Total Download", "↓ \(ByteFormat.speed(t.network.downloadBytesPerSec))")
+                detailRow("Total Upload", "↑ \(ByteFormat.speed(t.network.uploadBytesPerSec))")
                 if let mbps = t.network.lastSpeedTestMbps {
                     detailRow("Last Speed Test", String(format: "%.1f Mbps", mbps))
                 }
@@ -387,6 +528,85 @@ public struct MenuBarMonitorView: View {
                 .disabled(t.network.isTestingSpeed)
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
+
+                Divider()
+                HStack {
+                    Text("Per-App Live Bandwidth").font(.caption.bold()).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Refresh") { appState.refreshTelemetry(includeHeavy: true) }
+                        .font(.caption2)
+                        .buttonStyle(.link)
+                }
+                if t.topNetworkConsumers.isEmpty {
+                    Text("Collecting per-app socket rates...")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(t.topNetworkConsumers.prefix(6)) { proc in
+                        HStack(spacing: 6) {
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(proc.name)
+                                    .font(.caption.bold())
+                                    .lineLimit(1)
+                                Text("Total: ↓\(ByteFormat.string(proc.totalInBytes)) ↑\(ByteFormat.string(proc.totalOutBytes))")
+                                    .font(.system(size: 9.5))
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text("↓ \(ByteFormat.speed(proc.downloadBytesPerSec))")
+                                    .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                                    .foregroundStyle(Color(hex: "36E2F8"))
+                                Text("↑ \(ByteFormat.speed(proc.uploadBytesPerSec))")
+                                    .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                                    .foregroundStyle(Color(hex: "FFB703"))
+                            }
+                            Button("Quit") {
+                                _ = appState.telemetryService.terminateProcess(pid: proc.id)
+                                appState.refreshTelemetry(includeHeavy: true)
+                            }
+                            .controlSize(.mini)
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
+            case .alerts:
+                Text("Jarvis Smart Alerts").font(.headline)
+                Text("Configure exact thresholds for live HUD & Jarvis voice alerts.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Toggle("Enable Jarvis Smart Alerts", isOn: $appState.settings.enableJarvisSmartAlerts)
+                    .font(.callout.bold())
+
+                if appState.settings.enableJarvisSmartAlerts {
+                    Divider()
+                    Stepper("Low Disk: < \(appState.settings.warnLowDiskSpaceGB) GB", value: $appState.settings.warnLowDiskSpaceGB, in: 1...100, step: 1)
+                        .font(.caption)
+
+                    Toggle("High RAM Pressure Alert", isOn: $appState.settings.notifyLowRAM)
+                        .font(.caption)
+                    if appState.settings.notifyLowRAM {
+                        Stepper("RAM Threshold: ≥ \(appState.settings.ramAlertThresholdPercent)%", value: $appState.settings.ramAlertThresholdPercent, in: 60...98, step: 5)
+                            .font(.caption)
+                    }
+
+                    Toggle("Runaway CPU Process Alert", isOn: $appState.settings.notifyRunawayCPU)
+                        .font(.caption)
+                    if appState.settings.notifyRunawayCPU {
+                        Stepper("CPU Threshold: ≥ \(appState.settings.runawayCPUThresholdPercent)%", value: $appState.settings.runawayCPUThresholdPercent, in: 50...300, step: 10)
+                            .font(.caption)
+                        Stepper("Sustained For: \(appState.settings.runawayCPUDurationSeconds)s", value: $appState.settings.runawayCPUDurationSeconds, in: 15...300, step: 15)
+                            .font(.caption)
+                    }
+
+                    Toggle("Thermal Throttling Alert", isOn: $appState.settings.notifyThermalPressure)
+                        .font(.caption)
+
+                    Stepper("Alert Cooldown: \(appState.settings.smartAlertCooldownMinutes) min", value: $appState.settings.smartAlertCooldownMinutes, in: 1...60, step: 1)
+                        .font(.caption)
+                }
 
             case .protection:
                 Text("Real-Time Protection").font(.headline)
