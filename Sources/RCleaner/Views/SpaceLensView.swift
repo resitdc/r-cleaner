@@ -91,7 +91,7 @@ public struct SpaceLensView: View {
             ModuleHeaderBar(
                 title: "Space Lens",
                 backTitle: "Start Over",
-                trailingText: "Purgeable: \(ByteFormat.string(appState.telemetry.storage.purgeableBytes))"
+                trailingText: "\(ByteFormat.string(currentNode.sizeBytes)) • \(ByteFormat.itemCount(currentNode.itemCount))"
             ) {
                 navigationStack = []
                 appState.spaceLensStage = .intro
@@ -140,9 +140,7 @@ public struct SpaceLensView: View {
                                 palette: palette,
                                 onSelectionChanged: { appState.objectWillChange.send() }
                             ) {
-                                if child.isDirectory && !child.children.isEmpty {
-                                    navigationStack.append(child)
-                                }
+                                drillInto(child)
                             }
                         }
                     }
@@ -157,10 +155,8 @@ public struct SpaceLensView: View {
                         palette: palette,
                         size: geo.size
                     ) { tapped in
-                        if tapped.isDirectory && !tapped.children.isEmpty {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                                navigationStack.append(tapped)
-                            }
+                        if tapped.isDirectory {
+                            drillInto(tapped)
                         } else {
                             tapped.isSelected.toggle()
                             appState.objectWillChange.send()
@@ -307,6 +303,28 @@ public struct SpaceLensView: View {
         }
     }
 
+    private func drillInto(_ node: SpaceLensNode) {
+        guard node.isDirectory else { return }
+        if !node.children.isEmpty {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                navigationStack.append(node)
+            }
+            return
+        }
+        // Lazily expand folders deeper than the initial materialized tree depth
+        let service = appState.spaceLensService
+        Task {
+            let loadedChildren = await service.expandNode(node, additionalDepth: 3)
+            node.children = loadedChildren
+            if !loadedChildren.isEmpty {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    navigationStack.append(node)
+                }
+                appState.objectWillChange.send()
+            }
+        }
+    }
+
     private func performSpaceLensRemoval(_ nodes: [SpaceLensNode]) {
         Task {
             appState.spaceLensStage = .cleaning
@@ -363,7 +381,7 @@ private struct SpaceLensRow: View {
                 .font(.system(size: 12, weight: .semibold).monospacedDigit())
                 .foregroundStyle(.white.opacity(0.85))
 
-            if node.isDirectory && !node.children.isEmpty {
+            if node.isDirectory && (!node.children.isEmpty || node.itemCount > 0) {
                 Button(action: onDrillDown) {
                     Image(systemName: "chevron.right").font(.system(size: 11)).foregroundStyle(.white.opacity(0.55))
                 }
@@ -376,7 +394,7 @@ private struct SpaceLensRow: View {
         .onTapGesture(count: 2) { onDrillDown() }
         .contextMenu {
             Button("Reveal in Finder") { FileSystemHelpers.revealInFinder(path: node.path) }
-            if node.isDirectory && !node.children.isEmpty {
+            if node.isDirectory && (!node.children.isEmpty || node.itemCount > 0) {
                 Button("Open Folder in Space Lens") { onDrillDown() }
             }
         }

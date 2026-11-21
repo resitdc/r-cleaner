@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import ApplicationServices
+import Darwin
 
 public enum FileSystemHelpers {
     private static let protectedPrefixes: [String] = [
@@ -58,41 +59,273 @@ public enum FileSystemHelpers {
     }
 
     public static func fileSize(at url: URL) -> Int64 {
-        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileAllocatedSizeKey, .fileSizeKey]) else {
-            return 0
+        var st = stat()
+        guard lstat(url.path, &st) == 0 else { return 0 }
+        let mode = st.st_mode & S_IFMT
+        if mode == S_IFLNK { return 0 }
+        if mode == S_IFDIR {
+            return directorySize(at: url, maxFiles: 0)
         }
-        if values.isRegularFile == true {
-            return Int64(values.totalFileAllocatedSize ?? values.fileAllocatedSize ?? values.fileSize ?? 0)
-        }
-        return directorySize(at: url)
+        // Dataless cloud-only placeholders occupy 0 local bytes
+        if (st.st_flags & UInt32(SF_DATALESS)) != 0 { return 0 }
+        let alloc = Int64(st.st_blocks) * 512
+        return alloc > 0 ? alloc : Int64(st.st_size)
     }
 
-    public static func directorySize(at url: URL, maxFiles: Int = 20_000) -> Int64 {
-        let fm = FileManager.default
-        var isDir: ObjCBool = false
-        guard fm.fileExists(atPath: url.path, isDirectory: &isDir) else { return 0 }
-        if !isDir.boolValue {
-            let attrs = try? fm.attributesOfItem(atPath: url.path)
-            return (attrs?[.size] as? Int64) ?? 0
-        }
-        guard let enumerator = fm.enumerator(
-            at: url,
-            includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .fileSizeKey, .isRegularFileKey],
-            options: [.skipsPackageDescendants],
-            errorHandler: { _, _ in true }
-        ) else { return 0 }
+    /// High-speed APFS-aware recursive directory measurement powered by macOS `getattrlistbulk`.
+    /// Measures ALL regular files including packages/bundles without skipping descendants, skips symlinks
+    /// and cross-volume mount points, and excludes dataless cloud-only placeholders (`SF_DATALESS`).
+    /// Uses physical allocated disk bytes (`ATTR_FILE_ALLOCSIZE`), matching macOS Finder & Space Lens.
+    /// Pass `maxFiles: 0` for unlimited exact totals.
+    public static func directorySize(at url: URL, maxFiles: Int = 0) -> Int64 {
+        let (bytes, _) = bulkMeasureSubtree(atPath: url.path, rootDev: nil, maxFiles: maxFiles)
+        return bytes
+    }
 
-        var total: Int64 = 0
-        var count = 0
-        for case let fileURL as URL in enumerator {
-            count += 1
-            if count > maxFiles { break }
-            if let values = try? fileURL.resourceValues(forKeys: [.isRegularFileKey, .totalFileAllocatedSizeKey, .fileSizeKey]),
-               values.isRegularFile == true {
-                total += Int64(values.totalFileAllocatedSize ?? values.fileSize ?? 0)
+    public struct BulkDirEntry: Sendable {
+        public let name: String
+        public let isDirectory: Bool
+        public let isRegularFile: Bool
+        public let isSymlink: Bool
+        public let isDataless: Bool
+        public let devID: dev_t
+        public let allocatedSize: Int64
+    }
+
+    /// Reads all direct children of `dirPath` in batches using macOS `getattrlistbulk`.
+    public static func readDirectoryBulk(atPath dirPath: String) -> [BulkDirEntry] {
+        let fd = open(dirPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+        guard fd >= 0 else { return [] }
+        defer { close(fd) }
+
+        var al = attrlist()
+        al.bitmapcount = UInt16(ATTR_BIT_MAP_COUNT)
+        al.commonattr = UInt32(ATTR_CMN_RETURNED_ATTRS)
+            | UInt32(ATTR_CMN_NAME)
+            | UInt32(ATTR_CMN_DEVID)
+            | UInt32(ATTR_CMN_OBJTYPE)
+            | UInt32(ATTR_CMN_FLAGS)
+        al.fileattr = UInt32(ATTR_FILE_TOTALSIZE)
+            | UInt32(ATTR_FILE_ALLOCSIZE)
+
+        let bufSize = 128 * 1024
+        let rawBuf = UnsafeMutableRawPointer.allocate(byteCount: bufSize, alignment: 8)
+        defer { rawBuf.deallocate() }
+
+        var entries: [BulkDirEntry] = []
+        entries.reserveCapacity(64)
+
+        while true {
+            if Task.isCancelled { break }
+            let count = getattrlistbulk(fd, &al, rawBuf, bufSize, 0)
+            if count <= 0 { break }
+
+            var entryOffset = 0
+            for _ in 0..<count {
+                guard entryOffset + 4 <= bufSize else { break }
+                let entryBase = rawBuf.advanced(by: entryOffset)
+                let entryLen = Int(entryBase.loadUnaligned(as: UInt32.self))
+                guard entryLen >= 24, entryOffset + entryLen <= bufSize else { break }
+                defer { entryOffset += entryLen }
+
+                var cur = 4
+                let returned = entryBase.advanced(by: cur).loadUnaligned(as: attribute_set_t.self)
+                cur += MemoryLayout<attribute_set_t>.size
+
+                var name = ""
+                var devID: dev_t = 0
+                var objType: UInt32 = 0
+                var flags: UInt32 = 0
+                var totalSize: Int64 = 0
+                var allocSize: Int64 = 0
+                var hasAllocSize = false
+
+                // Common attributes in exact ascending bit order
+                if (returned.commonattr & UInt32(ATTR_CMN_NAME)) != 0, cur + MemoryLayout<attrreference_t>.size <= entryLen {
+                    let refPos = cur
+                    let ref = entryBase.advanced(by: cur).loadUnaligned(as: attrreference_t.self)
+                    cur += MemoryLayout<attrreference_t>.size
+                    let nameOff = refPos + Int(ref.attr_dataoffset)
+                    if nameOff >= 0, nameOff < entryLen {
+                        name = String(cString: entryBase.advanced(by: nameOff).assumingMemoryBound(to: CChar.self))
+                    }
+                }
+                if (returned.commonattr & UInt32(ATTR_CMN_DEVID)) != 0, cur + 4 <= entryLen {
+                    devID = entryBase.advanced(by: cur).loadUnaligned(as: dev_t.self)
+                    cur += 4
+                }
+                if (returned.commonattr & UInt32(ATTR_CMN_OBJTYPE)) != 0, cur + 4 <= entryLen {
+                    objType = entryBase.advanced(by: cur).loadUnaligned(as: UInt32.self)
+                    cur += 4
+                }
+                if (returned.commonattr & UInt32(ATTR_CMN_FLAGS)) != 0, cur + 4 <= entryLen {
+                    flags = entryBase.advanced(by: cur).loadUnaligned(as: UInt32.self)
+                    cur += 4
+                }
+
+                // File attributes (returned for non-directories) in ascending bit order
+                if (returned.fileattr & UInt32(ATTR_FILE_TOTALSIZE)) != 0, cur + 8 <= entryLen {
+                    totalSize = entryBase.advanced(by: cur).loadUnaligned(as: Int64.self)
+                    cur += 8
+                }
+                if (returned.fileattr & UInt32(ATTR_FILE_ALLOCSIZE)) != 0, cur + 8 <= entryLen {
+                    allocSize = entryBase.advanced(by: cur).loadUnaligned(as: Int64.self)
+                    hasAllocSize = true
+                    cur += 8
+                }
+
+                guard !name.isEmpty, name != ".", name != ".." else { continue }
+                let isDir = objType == VDIR.rawValue
+                let isReg = objType == VREG.rawValue
+                let isLink = objType == VLNK.rawValue
+                let isDataless = (flags & UInt32(SF_DATALESS)) != 0
+                let effectiveSize: Int64
+                if isDir || isLink || isDataless || !isReg {
+                    effectiveSize = 0
+                } else {
+                    effectiveSize = hasAllocSize ? allocSize : totalSize
+                }
+
+                entries.append(BulkDirEntry(
+                    name: name,
+                    isDirectory: isDir,
+                    isRegularFile: isReg,
+                    isSymlink: isLink,
+                    isDataless: isDataless,
+                    devID: devID,
+                    allocatedSize: effectiveSize
+                ))
             }
         }
-        return total
+        return entries
+    }
+
+    /// Ultra-fast iterative stack-based `getattrlistbulk` subtree measurement (zero URL allocations,
+    /// at most 1 open file descriptor at any instant, handles millions of files cleanly).
+    /// Returns physical allocated bytes (`ATTR_FILE_ALLOCSIZE`) and regular file count.
+    public static func bulkMeasureSubtree(
+        atPath rootPath: String,
+        rootDev: dev_t?,
+        maxFiles: Int = 0
+    ) -> (bytes: Int64, itemCount: Int) {
+        var rootSt = stat()
+        guard lstat(rootPath, &rootSt) == 0 else { return (0, 0) }
+        let mode = rootSt.st_mode & S_IFMT
+        if mode == S_IFLNK { return (0, 0) }
+        if mode != S_IFDIR {
+            if (rootSt.st_flags & UInt32(SF_DATALESS)) != 0 { return (0, 1) }
+            let alloc = Int64(rootSt.st_blocks) * 512
+            return (alloc > 0 ? alloc : Int64(rootSt.st_size), 1)
+        }
+
+        let targetDev = rootDev ?? rootSt.st_dev
+        var al = attrlist()
+        al.bitmapcount = UInt16(ATTR_BIT_MAP_COUNT)
+        al.commonattr = UInt32(ATTR_CMN_RETURNED_ATTRS)
+            | UInt32(ATTR_CMN_NAME)
+            | UInt32(ATTR_CMN_DEVID)
+            | UInt32(ATTR_CMN_OBJTYPE)
+            | UInt32(ATTR_CMN_FLAGS)
+        al.fileattr = UInt32(ATTR_FILE_TOTALSIZE)
+            | UInt32(ATTR_FILE_ALLOCSIZE)
+
+        let bufSize = 128 * 1024
+        let rawBuf = UnsafeMutableRawPointer.allocate(byteCount: bufSize, alignment: 8)
+        defer { rawBuf.deallocate() }
+
+        var totalBytes: Int64 = 0
+        var totalItems: Int = 0
+        var dirStack: [String] = [rootPath]
+        dirStack.reserveCapacity(1024)
+
+        while let dirPath = dirStack.popLast() {
+            if Task.isCancelled { break }
+            if maxFiles > 0 && totalItems >= maxFiles { break }
+
+            let fd = open(dirPath, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC)
+            guard fd >= 0 else { continue }
+            defer { close(fd) }
+
+            let basePrefix = dirPath == "/" ? "/" : (dirPath + "/")
+
+            while true {
+                if Task.isCancelled { break }
+                if maxFiles > 0 && totalItems >= maxFiles { break }
+                let count = getattrlistbulk(fd, &al, rawBuf, bufSize, 0)
+                if count <= 0 { break }
+
+                var entryOffset = 0
+                for _ in 0..<count {
+                    guard entryOffset + 4 <= bufSize else { break }
+                    let entryBase = rawBuf.advanced(by: entryOffset)
+                    let entryLen = Int(entryBase.loadUnaligned(as: UInt32.self))
+                    guard entryLen >= 24, entryOffset + entryLen <= bufSize else { break }
+                    defer { entryOffset += entryLen }
+
+                    var cur = 4
+                    let returned = entryBase.advanced(by: cur).loadUnaligned(as: attribute_set_t.self)
+                    cur += MemoryLayout<attribute_set_t>.size
+
+                    var nameOff = -1
+                    var devID: dev_t = targetDev
+                    var objType: UInt32 = 0
+                    var flags: UInt32 = 0
+                    var totalSize: Int64 = 0
+                    var allocSize: Int64 = 0
+                    var hasAllocSize = false
+
+                    if (returned.commonattr & UInt32(ATTR_CMN_NAME)) != 0, cur + MemoryLayout<attrreference_t>.size <= entryLen {
+                        let refPos = cur
+                        let ref = entryBase.advanced(by: cur).loadUnaligned(as: attrreference_t.self)
+                        cur += MemoryLayout<attrreference_t>.size
+                        nameOff = refPos + Int(ref.attr_dataoffset)
+                    }
+                    if (returned.commonattr & UInt32(ATTR_CMN_DEVID)) != 0, cur + 4 <= entryLen {
+                        devID = entryBase.advanced(by: cur).loadUnaligned(as: dev_t.self)
+                        cur += 4
+                    }
+                    if (returned.commonattr & UInt32(ATTR_CMN_OBJTYPE)) != 0, cur + 4 <= entryLen {
+                        objType = entryBase.advanced(by: cur).loadUnaligned(as: UInt32.self)
+                        cur += 4
+                    }
+                    if (returned.commonattr & UInt32(ATTR_CMN_FLAGS)) != 0, cur + 4 <= entryLen {
+                        flags = entryBase.advanced(by: cur).loadUnaligned(as: UInt32.self)
+                        cur += 4
+                    }
+
+                    if (returned.fileattr & UInt32(ATTR_FILE_TOTALSIZE)) != 0, cur + 8 <= entryLen {
+                        totalSize = entryBase.advanced(by: cur).loadUnaligned(as: Int64.self)
+                        cur += 8
+                    }
+                    if (returned.fileattr & UInt32(ATTR_FILE_ALLOCSIZE)) != 0, cur + 8 <= entryLen {
+                        allocSize = entryBase.advanced(by: cur).loadUnaligned(as: Int64.self)
+                        hasAllocSize = true
+                        cur += 8
+                    }
+
+                    // Skip symlinks and cross-volume mounts
+                    if objType == VLNK.rawValue { continue }
+                    if devID != targetDev { continue }
+
+                    if objType == VDIR.rawValue {
+                        guard nameOff >= 0, nameOff < entryLen else { continue }
+                        let cName = entryBase.advanced(by: nameOff).assumingMemoryBound(to: CChar.self)
+                        // Fast skip "." and ".." without allocating String
+                        if cName[0] == 46 && (cName[1] == 0 || (cName[1] == 46 && cName[2] == 0)) { continue }
+                        let childPath = basePrefix + String(cString: cName)
+                        // Avoid APFS Data volume firmlink recursion when scanning root
+                        if childPath == "/System/Volumes/Data" || childPath == "/dev" { continue }
+                        dirStack.append(childPath)
+                    } else if objType == VREG.rawValue {
+                        totalItems += 1
+                        if (flags & UInt32(SF_DATALESS)) != 0 { continue }
+                        let sz = hasAllocSize ? allocSize : totalSize
+                        if sz > 0 { totalBytes += sz }
+                    }
+                }
+            }
+        }
+        return (totalBytes, totalItems)
     }
 
     public static func safeRemoveItem(at path: String, moveToTrash: Bool = true) -> (success: Bool, error: String?) {

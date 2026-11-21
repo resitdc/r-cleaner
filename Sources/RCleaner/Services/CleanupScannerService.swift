@@ -71,7 +71,7 @@ public final class CleanupScannerService {
                 let cacheDir = "\(containersDir)/\(container)/Data/Library/Caches"
                 guard fm.fileExists(atPath: cacheDir) else { continue }
                 if FileSystemHelpers.isIgnored(path: cacheDir, category: .systemJunk, settings: settings) { continue }
-                let size = FileSystemHelpers.directorySize(at: URL(fileURLWithPath: cacheDir), maxFiles: 1500)
+                let size = FileSystemHelpers.directorySize(at: URL(fileURLWithPath: cacheDir), maxFiles: 0)
                 if size >= 256 * 1024 {
                     userCacheItems.append(ScanItem(
                         name: "\(container) (Container Cache)",
@@ -98,7 +98,7 @@ public final class CleanupScannerService {
             let full = FileSystemHelpers.expand(raw)
             guard fm.fileExists(atPath: full),
                   !FileSystemHelpers.isIgnored(path: full, category: .systemJunk, settings: settings) else { continue }
-            let sz = FileSystemHelpers.directorySize(at: URL(fileURLWithPath: full), maxFiles: 5000)
+            let sz = FileSystemHelpers.directorySize(at: URL(fileURLWithPath: full), maxFiles: 0)
             if sz >= 1024 * 1024 {
                 userCacheItems.append(ScanItem(
                     name: label,
@@ -479,7 +479,7 @@ public final class CleanupScannerService {
                 if let v = dict["Product Version"] as? String { iosVer = "iOS \(v)" }
                 if let d = dict["Last Backup Date"] as? Date { lastBackup = d }
             }
-            let sz = FileSystemHelpers.directorySize(at: URL(fileURLWithPath: full), maxFiles: 15_000)
+            let sz = FileSystemHelpers.directorySize(at: URL(fileURLWithPath: full), maxFiles: 0)
             if sz > 1024 * 1024 {
                 raw.append((deviceName, deviceID, full, sz, lastBackup, iosVer.isEmpty ? "iOS Backup" : iosVer))
             }
@@ -580,7 +580,7 @@ public final class CleanupScannerService {
             let trashMboxes = findRes.stdout.split(separator: "\n").map(String.init).filter { !$0.isEmpty }
             var mailTrashItems: [ScanItem] = []
             for mbox in trashMboxes {
-                let sz = FileSystemHelpers.directorySize(at: URL(fileURLWithPath: mbox), maxFiles: 2000)
+                let sz = FileSystemHelpers.directorySize(at: URL(fileURLWithPath: mbox), maxFiles: 0)
                 if sz > 16 * 1024 {
                     mailTrashItems.append(ScanItem(
                         name: URL(fileURLWithPath: mbox).lastPathComponent,

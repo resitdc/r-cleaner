@@ -791,7 +791,7 @@ public final class AppState: ObservableObject {
         spaceLensProgress = 0.05
 
         activeTask = Task {
-            let root = await spaceLensService.buildTree(at: target, maxDepth: 3) { msg, pct in
+            let root = await spaceLensService.buildTree(at: target, maxDepth: 4) { msg, pct in
                 Task { @MainActor in
                     self.spaceLensStatusText = msg
                     self.spaceLensProgress = pct

@@ -114,7 +114,7 @@ public final class ApplicationsService {
             let store = classifyStore(path: appPath, bundleID: bundleID, isMAS: isMAS)
             let vendor = classifyVendor(bundleID: bundleID, name: name)
 
-            let size = FileSystemHelpers.directorySize(at: url, maxFiles: 6000)
+            let size = FileSystemHelpers.directorySize(at: url, maxFiles: 0)
             let vals = try? url.resourceValues(forKeys: [.contentAccessDateKey, .contentModificationDateKey])
             let lastOpened = vals?.contentAccessDate ?? vals?.contentModificationDate
 

@@ -560,6 +560,7 @@ public final class SpaceLensNode: Identifiable, ObservableObject {
     public let isCloudItem: Bool
     public let isCloudOnlyEvicted: Bool
     public var sizeBytes: Int64
+    public var itemCount: Int
     public var children: [SpaceLensNode]
     @Published public var isSelected: Bool = false
 
@@ -571,6 +572,7 @@ public final class SpaceLensNode: Identifiable, ObservableObject {
         isCloudItem: Bool = false,
         isCloudOnlyEvicted: Bool = false,
         sizeBytes: Int64 = 0,
+        itemCount: Int = 1,
         children: [SpaceLensNode] = []
     ) {
         self.name = name
@@ -580,6 +582,7 @@ public final class SpaceLensNode: Identifiable, ObservableObject {
         self.isCloudItem = isCloudItem
         self.isCloudOnlyEvicted = isCloudOnlyEvicted
         self.sizeBytes = sizeBytes
+        self.itemCount = itemCount
         self.children = children
     }
 }

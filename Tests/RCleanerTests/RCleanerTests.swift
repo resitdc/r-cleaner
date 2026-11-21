@@ -108,15 +108,31 @@ final class RCleanerTests: XCTestCase {
     func testSpaceLensTreeCalculation() async throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("rcleaner-lens-\(UUID().uuidString)")
         let subDir = tempDir.appendingPathComponent("BigFolder")
-        try FileManager.default.createDirectory(at: subDir, withIntermediateDirectories: true)
+        let pkgDir = subDir.appendingPathComponent("NestedApp.app/Contents/MacOS")
+        try FileManager.default.createDirectory(at: pkgDir, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: tempDir) }
 
-        try Data(repeating: 0x11, count: 65_536).write(to: subDir.appendingPathComponent("data.bin"))
+        let fileA = subDir.appendingPathComponent("data.bin")
+        let pkgBin = pkgDir.appendingPathComponent("AppBin")
+        let hardLink = subDir.appendingPathComponent("data_hardlink.bin")
+        let symLink = subDir.appendingPathComponent("data_symlink.bin")
+
+        try Data(repeating: 0x11, count: 65_536).write(to: fileA)
+        try Data(repeating: 0x22, count: 65_536).write(to: pkgBin)
+        try FileManager.default.linkItem(at: fileA, to: hardLink)
+        try FileManager.default.createSymbolicLink(at: symLink, withDestinationURL: fileA)
 
         let service = SpaceLensService()
         let root = await service.buildTree(at: tempDir, maxDepth: 2) { _, _ in }
-        XCTAssertTrue(root.sizeBytes >= 65_536)
+        // Must count data.bin (64KB), package descendant AppBin (64KB), AND hard link (64KB, matching
+        // Finder/APFS per-folder sizing invariance), while NOT following or double-counting the symlink (< 240KB).
+        XCTAssertGreaterThanOrEqual(root.sizeBytes, 196_608)
+        XCTAssertLessThan(root.sizeBytes, 240_000)
         XCTAssertEqual(root.children.first?.name, "BigFolder")
+        // Counts regular files only (data.bin, AppBin, data_hardlink.bin) — excludes directories and symlinks
+        XCTAssertEqual(root.itemCount, 3)
+        XCTAssertEqual(ByteFormat.itemCount(2_763_088), "2M items")
+        XCTAssertEqual(ByteFormat.itemCount(4_354_232), "4M items")
     }
 
     func testAssistantHealthScoring() {

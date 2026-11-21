@@ -563,4 +563,19 @@ public enum ByteFormat {
         if hours > 0 { return "\(hours)h \(mins)m" }
         return "\(mins)m"
     }
+
+    public static func itemCount(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return "\(count / 1_000_000)M items"
+        } else if count >= 10_000 {
+            return "\(count / 1_000)K items"
+        } else if count >= 1_000 {
+            let k = Double(count) / 1_000.0
+            return String(format: "%.1fK items", k).replacingOccurrences(of: ".0K", with: "K")
+        } else if count == 1 {
+            return "1 item"
+        } else {
+            return "\(count) items"
+        }
+    }
 }
