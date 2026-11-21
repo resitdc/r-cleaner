@@ -1,0 +1,229 @@
+import SwiftUI
+import AppKit
+
+public struct SettingsView: View {
+    @EnvironmentObject var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedIgnoreCat: IgnoreListCategory = .systemJunk
+
+    public init() {}
+
+    public var body: some View {
+        VStack(spacing: 0) {
+            TabView {
+                generalTab
+                    .tabItem { Label("General", systemImage: "gearshape") }
+                scanningTab
+                    .tabItem { Label("Scanning", systemImage: "magnifyingglass.circle") }
+                protectionTab
+                    .tabItem { Label("Protection", systemImage: "shield.lefthalf.filled") }
+                ignoreListTab
+                    .tabItem { Label("Ignore List", systemImage: "hand.raised") }
+                menuTab
+                    .tabItem { Label("Menu", systemImage: "menubar.rectangle") }
+                notificationsTab
+                    .tabItem { Label("Notifications", systemImage: "bell.badge") }
+            }
+            .padding(16)
+
+            Divider()
+
+            HStack {
+                Text("R-Cleaner v1.0 • Native macOS Care Suite")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 10)
+        }
+    }
+
+    private var generalTab: some View {
+        Form {
+            Section("Interface & Audio") {
+                Toggle("Play sounds for main R-Cleaner actions", isOn: $appState.settings.playSounds)
+                Toggle("Reduce Motion (disable animated live background)", isOn: $appState.settings.reduceMotion)
+                Toggle("Show Assistant recommendations", isOn: $appState.settings.showAssistantRecommendations)
+                Toggle("Enable Smart Insights", isOn: $appState.settings.enableSmartInsights)
+                HStack {
+                    Text("Onboarding & Intro Animation")
+                    Spacer()
+                    Button("Replay Intro Tour") {
+                        dismiss()
+                        appState.replayIntro()
+                    }
+                }
+            }
+
+            Section("macOS System Permissions") {
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Full Disk Access")
+                            .fontWeight(.semibold)
+                        Text(FileSystemHelpers.hasFullDiskAccess() ? "Enabled for R-Cleaner" : "Disabled — grant to inspect Safari, Mail, and protected caches")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Open Settings") { FileSystemHelpers.openPrivacySettings(pane: "Privacy_AllFiles") }
+                }
+
+                HStack {
+                    VStack(alignment: .leading) {
+                        Text("Accessibility (Screen Cleaning Mode)")
+                            .fontWeight(.semibold)
+                        Text(FileSystemHelpers.hasAccessibilityPermission() ? "Enabled — keyboard lock active during Screen Cleaning Mode" : "Disabled — required to lock keyboard while wiping screen")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Open Settings") { FileSystemHelpers.openPrivacySettings(pane: "Privacy_Accessibility") }
+                }
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var scanningTab: some View {
+        Form {
+            Section("Modules to scan using Smart Care") {
+                Toggle("Cleanup (System Junk, Mail, Trash, AI Clutter)", isOn: $appState.settings.smartCareCleanupEnabled)
+                Toggle("Protection (Malware & Privacy)", isOn: $appState.settings.smartCareProtectionEnabled)
+                Toggle("Performance (Maintenance Tasks)", isOn: $appState.settings.smartCarePerformanceEnabled)
+                Toggle("Applications (Leftovers & Installers)", isOn: $appState.settings.smartCareApplicationsEnabled)
+                Toggle("My Clutter (Duplicate Downloads)", isOn: $appState.settings.smartCareMyClutterEnabled)
+            }
+
+            Section("Categories to scan using Cleanup") {
+                Toggle("System Junk", isOn: $appState.settings.scanSystemJunk)
+                Toggle("Mail Attachments", isOn: $appState.settings.scanMailAttachments)
+                Toggle("Trash Bins", isOn: $appState.settings.scanTrashBins)
+                Toggle("AI Clutter & Local Models", isOn: $appState.settings.scanAIClutter)
+            }
+
+            Section("Uninstaller") {
+                Toggle("Ignore system applications (/System/Applications)", isOn: $appState.settings.ignoreSystemApplications)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var protectionTab: some View {
+        Form {
+            Section("Malware Monitoring Configuration") {
+                Toggle("Enable Real-Time Malware Monitor", isOn: $appState.settings.enableRealTimeMalwareMonitor)
+                Toggle("Look for threats in the background", isOn: $appState.settings.enableBackgroundScan)
+            }
+
+            Section("Scan Options") {
+                Picker("Scan Mode", selection: $appState.settings.malwareScanMode) {
+                    ForEach(MalwareScanMode.allCases) { mode in
+                        Text("\(mode.rawValue) (\(mode.depthLabel))").tag(mode)
+                    }
+                }
+                Text(appState.settings.malwareScanMode.purposeDescription)
+                    .font(.caption).foregroundStyle(.secondary)
+
+                Toggle("Scan archives", isOn: $appState.settings.scanArchives)
+                Toggle("Scan DMG disk images", isOn: $appState.settings.scanDMGImages)
+                Toggle("Scan email attachments", isOn: $appState.settings.scanEmailAttachments)
+                Toggle("Scan USB drives", isOn: $appState.settings.scanUSBDrives)
+                Toggle("Exclude downloaded iCloud files", isOn: $appState.settings.excludeDownloadedICloudFiles)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var ignoreListTab: some View {
+        let filtered = appState.settings.ignoredItems.filter { $0.category == selectedIgnoreCat }
+
+        return HStack(spacing: 12) {
+            List(IgnoreListCategory.allCases, selection: $selectedIgnoreCat) { cat in
+                Text(cat.rawValue).tag(cat)
+            }
+            .frame(width: 190)
+
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("\(selectedIgnoreCat.rawValue) Ignore List")
+                        .font(.headline)
+                    Spacer()
+                    Button("Add Path...") {
+                        let panel = NSOpenPanel()
+                        panel.canChooseFiles = true
+                        panel.canChooseDirectories = true
+                        if panel.runModal() == .OK, let url = panel.url {
+                            appState.addToIgnoreList(path: url.path, displayName: url.lastPathComponent, category: selectedIgnoreCat)
+                        }
+                    }
+                    Button("Reset Category") {
+                        appState.settings.ignoredItems.removeAll { $0.category == selectedIgnoreCat }
+                    }
+                    .disabled(filtered.isEmpty)
+                }
+
+                if filtered.isEmpty {
+                    ContentUnavailableView("No Ignored Items", systemImage: "hand.raised", description: Text("Right-click any scan item or click 'Add Path...' to exclude items from \(selectedIgnoreCat.rawValue)."))
+                } else {
+                    List {
+                        ForEach(filtered) { item in
+                            HStack {
+                                VStack(alignment: .leading) {
+                                    Text(item.displayName).fontWeight(.medium)
+                                    Text(item.path).font(.caption).foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Button(role: .destructive) {
+                                    appState.removeIgnoredItem(item)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var menuTab: some View {
+        Form {
+            Section("R-Cleaner Menu") {
+                Toggle("Enable Menu Bar Monitor", isOn: $appState.settings.enableMenuMonitor)
+                Toggle("Open at Login", isOn: $appState.settings.openMenuAtLogin)
+                Toggle("Enable recommendations in Menu", isOn: $appState.settings.enableMenuRecommendations)
+            }
+            Section("External Drives") {
+                Toggle("Clean up junk automatically on ejection", isOn: $appState.settings.autoCleanExternalDrivesOnEject)
+            }
+        }
+        .formStyle(.grouped)
+    }
+
+    private var notificationsTab: some View {
+        Form {
+            Section("Reminders") {
+                Toggle("Remind to run regular Smart Care", isOn: $appState.settings.remindSmartCare)
+                if appState.settings.remindSmartCare {
+                    Picker("Frequency", selection: $appState.settings.smartCareReminderFrequency) {
+                        ForEach(ReminderFrequency.allCases) { f in Text(f.rawValue).tag(f) }
+                    }
+                }
+                Toggle("Remind to wipe your Mac screen (Every 2 weeks)", isOn: $appState.settings.remindScreenCleaning)
+            }
+
+            Section("Thresholds & System Alerts") {
+                Stepper("Warn when free disk space < \(appState.settings.warnLowDiskSpaceGB) GB", value: $appState.settings.warnLowDiskSpaceGB, in: 5...100, step: 5)
+                Stepper("Notify if Trash size exceeds \(appState.settings.notifyTrashExceedsGB) GB", value: $appState.settings.notifyTrashExceedsGB, in: 1...50)
+                Toggle("Notify when too low on free RAM", isOn: $appState.settings.notifyLowRAM)
+                Toggle("Notify when Chrome uses too much memory", isOn: $appState.settings.notifyHeavyChrome)
+                Toggle("Notify about hung applications", isOn: $appState.settings.notifyHungApps)
+                Toggle("Offer to uninstall trashed applications correctly", isOn: $appState.settings.notifyTrashedApps)
+                Toggle("Warn when Bluetooth device batteries are low", isOn: $appState.settings.notifyBluetoothLowBattery)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
