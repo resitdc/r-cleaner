@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Futuristic arc-reactor inspired glowing circular footer action button.
+/// Glowing circular primary footer action button for R-Cleaner modules.
 public struct UbiquitousButton: View {
     public let title: String
     public let subtitle: String?
@@ -30,56 +30,54 @@ public struct UbiquitousButton: View {
     public var body: some View {
         Button(action: action) {
             ZStack {
-                // Soft outer HUD energy halo
+                // Soft glow halo
                 Circle()
                     .fill(
                         RadialGradient(
-                            colors: [Color(hex: "19F8FF").opacity(isHovered ? 0.34 : 0.16), palette.primary.opacity(isHovered ? 0.28 : 0.14), .clear],
+                            colors: [palette.primary.opacity(isHovered ? 0.54 : 0.34), .clear],
                             center: .center,
-                            startRadius: 24,
+                            startRadius: 20,
                             endRadius: 60
                         )
                     )
-                    .frame(width: 118, height: 118)
+                    .frame(width: 114, height: 114)
 
-                // Segmented precision outer ring (Stark HUD style)
+                // Outer crisp luminous ring
                 Circle()
                     .stroke(
                         LinearGradient(
-                            colors: [Color(hex: "19F8FF").opacity(isHovered ? 0.9 : 0.55), palette.primary.opacity(0.65), Color.white.opacity(0.15)],
+                            colors: [palette.primary.opacity(isRunning ? 0.88 : 0.58), palette.accent.opacity(0.48)],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        style: StrokeStyle(lineWidth: isRunning ? 2.5 : 1.5, dash: [18, 6])
+                        lineWidth: isRunning ? 3 : 1.75
                     )
-                    .frame(width: 98, height: 98)
+                    .frame(width: 94, height: 94)
 
-                // Crisp inner ring
-                Circle()
-                    .stroke(Color.white.opacity(0.18), lineWidth: 0.75)
-                    .frame(width: 90, height: 90)
-
-                // Core glass energy sphere
+                // Main liquid-glass sphere
                 Circle()
                     .fill(
                         LinearGradient(
                             colors: isDisabled
-                                ? [Color.white.opacity(0.10), Color.white.opacity(0.05)]
-                                : [palette.primary.opacity(0.95), palette.secondary.opacity(0.92)],
+                                ? [Color.white.opacity(0.14), Color.white.opacity(0.08)]
+                                : [palette.primary, palette.secondary],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         )
                     )
-                    .frame(width: 80, height: 80)
+                    .frame(width: 82, height: 82)
                     .overlay(
                         Circle()
                             .strokeBorder(
                                 LinearGradient(
-                                    colors: [Color.white.opacity(isHovered ? 0.85 : 0.50), Color(hex: "19F8FF").opacity(0.45), .clear],
-                                    startPoint: .top,
-                                    endPoint: .bottom
+                                    colors: [
+                                        Color.white.opacity(isHovered ? 0.72 : 0.45),
+                                        Color.white.opacity(0.12)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
                                 ),
-                                lineWidth: 1.4
+                                lineWidth: 1.5
                             )
                     )
                     .shadow(color: palette.primary.opacity(isDisabled ? 0 : 0.45), radius: isHovered ? 18 : 10, y: 4)
@@ -87,20 +85,19 @@ public struct UbiquitousButton: View {
 
                 VStack(spacing: 2) {
                     Text(title)
-                        .font(.system(size: 13.5, weight: .bold, design: .rounded))
-                        .tracking(0.3)
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
                         .foregroundStyle(.white)
                         .lineLimit(1)
                     if let subtitle, !subtitle.isEmpty {
                         Text(subtitle)
-                            .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                            .font(.system(size: 10, weight: .medium))
                             .foregroundStyle(.white.opacity(0.88))
                             .lineLimit(1)
                     }
                 }
                 .padding(.horizontal, 6)
             }
-            .frame(width: 118, height: 118)
+            .frame(width: 114, height: 114)
             .contentShape(Circle())
         }
         .buttonStyle(.plain)

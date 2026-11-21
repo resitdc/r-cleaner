@@ -116,12 +116,11 @@ public enum RCleanerTheme {
         }
     }
 
-    public static let cardBackground = Color(hex: "0C1222").opacity(0.62)
-    public static let cardBackgroundHover = Color(hex: "121C33").opacity(0.76)
-    public static let cardBorder = Color.white.opacity(0.11)
-    public static let cardBorderAccent = Color(hex: "19F8FF").opacity(0.32)
-    public static let sidebarBackground = Color(hex: "060913").opacity(0.76)
-    public static let hudCyan = Color(hex: "19F8FF")
+    public static let cardBackground = Color.white.opacity(0.085)
+    public static let cardBackgroundHover = Color.white.opacity(0.13)
+    public static let cardBorder = Color.white.opacity(0.16)
+    public static let cardBorderHover = Color.white.opacity(0.28)
+    public static let sidebarBackground = Color.black.opacity(0.26)
 }
 
 public extension Color {

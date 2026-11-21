@@ -34,8 +34,8 @@ public struct GlassCard<Content: View>: View {
                             .strokeBorder(
                                 LinearGradient(
                                     colors: [
-                                        highlightColor?.opacity(0.65) ?? (isHovered ? RCleanerTheme.cardBorderAccent : Color.white.opacity(0.16)),
-                                        Color.white.opacity(0.05)
+                                        highlightColor?.opacity(0.55) ?? (isHovered ? RCleanerTheme.cardBorderHover : Color.white.opacity(0.22)),
+                                        Color.white.opacity(0.06)
                                     ],
                                     startPoint: .topLeading,
                                     endPoint: .bottomTrailing
@@ -43,6 +43,7 @@ public struct GlassCard<Content: View>: View {
                                 lineWidth: 1
                             )
                     )
+                    .shadow(color: Color.black.opacity(isHovered ? 0.22 : 0.12), radius: isHovered ? 14 : 8, y: 4)
             )
             .onHover { hovering in
                 withAnimation(.easeOut(duration: 0.15)) {

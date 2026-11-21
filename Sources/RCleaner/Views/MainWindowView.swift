@@ -198,9 +198,14 @@ public struct MainWindowView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Top-Right Futuristic HUD Cluster: Voice AI Briefing Pill + Assistant Health Pill
+            // Top-Right Frosted Glass Cluster: Voice AI Pill + Assistant Health Pill
+            let activePalette = RCleanerTheme.palette(for: appState.selectedModule)
             HStack(spacing: 8) {
-                VoiceHUDButton(voiceService: appState.voiceService, isEnabled: appState.settings.enableVoiceAssistant) {
+                VoiceHUDButton(
+                    voiceService: appState.voiceService,
+                    isEnabled: appState.settings.enableVoiceAssistant,
+                    accentColor: activePalette.accent
+                ) {
                     appState.speakSystemBriefing()
                 } onToggleMute: {
                     appState.toggleVoiceAssistant()
@@ -213,22 +218,22 @@ public struct MainWindowView: View {
                         HStack(spacing: 8) {
                             Circle()
                                 .fill(healthColor)
-                                .frame(width: 7, height: 7)
-                                .shadow(color: healthColor, radius: 5)
+                                .frame(width: 8, height: 8)
+                                .shadow(color: healthColor.opacity(0.8), radius: 4)
                             Text("Assistant")
-                                .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                                .font(.system(size: 12, weight: .semibold, design: .rounded))
                                 .foregroundStyle(.white)
                             Text("\(appState.healthScore)%")
-                                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                                .foregroundStyle(Color(hex: "19F8FF"))
-                                .padding(.horizontal, 6)
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white.opacity(0.92))
+                                .padding(.horizontal, 7)
                                 .padding(.vertical, 2)
-                                .background(Capsule().fill(Color(hex: "19F8FF").opacity(0.14)))
+                                .background(Capsule().fill(Color.white.opacity(0.14)))
                         }
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
-                        .background(Capsule().fill(Color(hex: "090E1D").opacity(0.78)))
-                        .overlay(Capsule().strokeBorder(Color(hex: "19F8FF").opacity(0.28), lineWidth: 1))
+                        .background(Capsule().fill(Color.white.opacity(0.11)))
+                        .overlay(Capsule().strokeBorder(Color.white.opacity(0.20), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .popover(isPresented: $appState.showAssistantPopover, arrowEdge: .bottom) {
@@ -294,25 +299,21 @@ private struct SidebarRowView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(
-                ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .fill(
-                            isSelected
-                                ? Color(hex: "19F8FF").opacity(0.13)
-                                : (isHovered ? Color.white.opacity(0.06) : Color.clear)
-                        )
-                    if isSelected {
-                        Capsule()
-                            .fill(Color(hex: "19F8FF"))
-                            .frame(width: 3, height: 18)
-                            .shadow(color: Color(hex: "19F8FF"), radius: 5)
-                            .padding(.leading, 2)
-                    }
-                }
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(
+                        isSelected
+                            ? Color.white.opacity(0.15)
+                            : (isHovered ? Color.white.opacity(0.08) : Color.clear)
+                    )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .strokeBorder(isSelected ? Color(hex: "19F8FF").opacity(0.32) : Color.clear, lineWidth: 1)
+                    .strokeBorder(
+                        isSelected
+                            ? LinearGradient(colors: [Color.white.opacity(0.28), palette.accent.opacity(0.22)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                            : LinearGradient(colors: [.clear, .clear], startPoint: .top, endPoint: .bottom),
+                        lineWidth: 1
+                    )
             )
         }
         .buttonStyle(.plain)
@@ -320,42 +321,35 @@ private struct SidebarRowView: View {
     }
 }
 
-/// Sleek holographic Voice AI pill in the top-right HUD.
-/// Displays an animated cyan equalizer ONLY while actively speaking (0% idle overhead).
+/// Frosted-glass Voice AI pill in the top-right bar, harmonized with the active module's palette.
+/// Displays an animated equalizer ONLY while actively speaking (0% idle overhead).
 private struct VoiceHUDButton: View {
     @ObservedObject var voiceService: VoiceAssistantService
     let isEnabled: Bool
+    let accentColor: Color
     let onBriefing: () -> Void
     let onToggleMute: () -> Void
 
     var body: some View {
+        let borderColor: Color = voiceService.isSpeaking ? accentColor.opacity(0.75) : Color.white.opacity(0.20)
+        let glowColor: Color = voiceService.isSpeaking ? accentColor.opacity(0.35) : .clear
+
         HStack(spacing: 4) {
             Button(action: onBriefing) {
                 HStack(spacing: 7) {
                     if voiceService.isSpeaking {
-                        TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { tl in
-                            let t = tl.date.timeIntervalSinceReferenceDate
-                            HStack(spacing: 2) {
-                                ForEach(0..<4, id: \.self) { i in
-                                    let h = 4 + abs(sin(t * 7.5 + Double(i) * 1.1)) * 10
-                                    Capsule()
-                                        .fill(Color(hex: "19F8FF"))
-                                        .frame(width: 2.5, height: h)
-                                }
-                            }
-                            .frame(height: 14)
-                        }
+                        equalizerBars
                     } else {
                         Image(systemName: isEnabled ? "waveform" : "speaker.slash.fill")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(isEnabled ? Color(hex: "19F8FF") : .white.opacity(0.45))
+                            .foregroundStyle(isEnabled ? accentColor : Color.white.opacity(0.5))
                     }
 
-                    Text(voiceService.isSpeaking ? "Speaking" : (isEnabled ? "Voice AI" : "Muted"))
-                        .font(.system(size: 11, weight: .semibold, design: .rounded))
-                        .foregroundStyle(isEnabled ? .white : .white.opacity(0.5))
+                    Text(statusTitle)
+                        .font(.system(size: 11.5, weight: .semibold, design: .rounded))
+                        .foregroundStyle(isEnabled ? Color.white : Color.white.opacity(0.55))
                 }
-                .padding(.leading, 10)
+                .padding(.leading, 11)
                 .padding(.trailing, 6)
                 .padding(.vertical, 7)
             }
@@ -364,25 +358,40 @@ private struct VoiceHUDButton: View {
 
             Divider()
                 .frame(height: 12)
-                .overlay(Color.white.opacity(0.16))
+                .overlay(Color.white.opacity(0.18))
 
             Button(action: onToggleMute) {
                 Image(systemName: isEnabled ? "speaker.wave.2.fill" : "speaker.slash")
-                    .font(.system(size: 10))
-                    .foregroundStyle(isEnabled ? Color(hex: "19F8FF").opacity(0.85) : .white.opacity(0.45))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(isEnabled ? Color.white.opacity(0.85) : Color.white.opacity(0.45))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 7)
             }
             .buttonStyle(.plain)
             .help(isEnabled ? "Mute Voice AI" : "Enable Voice AI")
         }
-        .background(Capsule().fill(Color(hex: "090E1D").opacity(0.78)))
-        .overlay(
-            Capsule().strokeBorder(
-                voiceService.isSpeaking ? Color(hex: "19F8FF").opacity(0.8) : Color(hex: "19F8FF").opacity(0.24),
-                lineWidth: 1
-            )
-        )
-        .shadow(color: voiceService.isSpeaking ? Color(hex: "19F8FF").opacity(0.35) : .clear, radius: 10)
+        .background(Capsule().fill(Color.white.opacity(0.11)))
+        .overlay(Capsule().strokeBorder(borderColor, lineWidth: 1))
+        .shadow(color: glowColor, radius: 10)
+    }
+
+    private var statusTitle: String {
+        if voiceService.isSpeaking { return "Speaking" }
+        return isEnabled ? "Voice AI" : "Muted"
+    }
+
+    private var equalizerBars: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 24.0)) { tl in
+            let t = tl.date.timeIntervalSinceReferenceDate
+            HStack(spacing: 2) {
+                ForEach(0..<4, id: \.self) { i in
+                    let h = 4.0 + abs(sin(t * 7.5 + Double(i) * 1.1)) * 10.0
+                    Capsule()
+                        .fill(accentColor)
+                        .frame(width: 2.5, height: CGFloat(h))
+                }
+            }
+            .frame(height: 14)
+        }
     }
 }
