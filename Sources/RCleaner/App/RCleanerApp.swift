@@ -42,10 +42,15 @@ public struct RCleanerApp: App {
                 Button("About R-Cleaner") {
                     NSApp.orderFrontStandardAboutPanel(options: [
                         .applicationName: "R-Cleaner",
-                        .applicationVersion: "1.0.0",
+                        .applicationVersion: AppUpdaterService.currentAppVersion,
                         .credits: NSAttributedString(string: "Native macOS System Care, Cleanup, Protection & Performance Suite.")
                     ])
                 }
+                Divider()
+                Button("Check for Updates...") {
+                    appState.checkForUpdates(userInitiated: true)
+                }
+                .keyboardShortcut("u", modifiers: .command)
             }
             CommandGroup(replacing: .appSettings) {
                 Button("Settings...") {

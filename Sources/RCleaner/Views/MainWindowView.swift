@@ -53,6 +53,10 @@ public struct MainWindowView: View {
                 .environmentObject(appState)
                 .frame(width: 780, height: 540)
         }
+        .sheet(isPresented: $appState.showUpdateSheet) {
+            AppUpdateSheet()
+                .environmentObject(appState)
+        }
     }
 
     // MARK: - Translucent Sidebar
@@ -199,9 +203,41 @@ public struct MainWindowView: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            // Top-Right Frosted Glass Cluster: Voice AI Pill + Assistant Health Pill
+            // Top-Right Frosted Glass Cluster: Update Badge (when available) + Voice AI Pill + Assistant Health Pill
             let activePalette = RCleanerTheme.palette(for: appState.selectedModule)
             HStack(spacing: 8) {
+                if let update = appState.availableUpdate {
+                    Button {
+                        appState.updateState = .updateAvailable(update)
+                        appState.showUpdateSheet = true
+                    } label: {
+                        HStack(spacing: 5) {
+                            Image(systemName: "arrow.down.circle.fill")
+                                .font(.system(size: 11.5, weight: .bold))
+                                .foregroundStyle(Color(hex: "00F5D4"))
+                            Text("Update \(update.tagName)")
+                                .font(.system(size: 11, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                        }
+                        .padding(.horizontal, 11)
+                        .padding(.vertical, 7)
+                        .background(
+                            Capsule().fill(
+                                LinearGradient(
+                                    colors: [Color(hex: "00D2A0").opacity(0.45), Color(hex: "00BBF9").opacity(0.40)],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                        )
+                        .overlay(Capsule().strokeBorder(Color(hex: "5EFCE8").opacity(0.65), lineWidth: 1))
+                        .shadow(color: Color(hex: "00D2A0").opacity(0.35), radius: 8)
+                    }
+                    .buttonStyle(.plain)
+                    .help("New R-Cleaner release \(update.tagName) is available on GitHub")
+                }
+
                 VoiceHUDButton(
                     voiceService: appState.voiceService,
                     isEnabled: appState.settings.enableVoiceAssistant,

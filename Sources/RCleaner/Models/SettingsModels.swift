@@ -93,6 +93,7 @@ public struct RCleanerSettings: Codable, Equatable {
     public var showAssistantRecommendations: Bool = true
     public var enableSmartInsights: Bool = true
     public var checkUpdatesAutomatically: Bool = true
+    public var skippedUpdateVersion: String = ""
 
     // Voice AI System (Bundled Neural Voice Pack + Built-in macOS TTS)
     public var enableVoiceAssistant: Bool = true
@@ -172,6 +173,7 @@ public struct RCleanerSettings: Codable, Equatable {
         showAssistantRecommendations = (try? c.decodeIfPresent(Bool.self, forKey: .showAssistantRecommendations)) ?? d.showAssistantRecommendations
         enableSmartInsights = (try? c.decodeIfPresent(Bool.self, forKey: .enableSmartInsights)) ?? d.enableSmartInsights
         checkUpdatesAutomatically = (try? c.decodeIfPresent(Bool.self, forKey: .checkUpdatesAutomatically)) ?? d.checkUpdatesAutomatically
+        skippedUpdateVersion = (try? c.decodeIfPresent(String.self, forKey: .skippedUpdateVersion)) ?? d.skippedUpdateVersion
 
         enableVoiceAssistant = (try? c.decodeIfPresent(Bool.self, forKey: .enableVoiceAssistant)) ?? d.enableVoiceAssistant
         useBundledVoicePack = (try? c.decodeIfPresent(Bool.self, forKey: .useBundledVoicePack)) ?? d.useBundledVoicePack

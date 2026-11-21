@@ -195,6 +195,65 @@ final class RCleanerTests: XCTestCase {
         XCTAssertEqual(DevAISweeperService.parseDockerSize("480MB"), 480_000_000)
     }
 
+    func testAppUpdaterSemVerChecksumsAndReleaseParsing() throws {
+        // SemVer comparison edge cases
+        XCTAssertTrue(AppUpdaterService.isVersion("v1.2.0", newerThan: "1.1.0"))
+        XCTAssertTrue(AppUpdaterService.isVersion("2.0.0", newerThan: "1.9.9"))
+        XCTAssertTrue(AppUpdaterService.isVersion("1.2.0", newerThan: "1.2.0-beta.1"))
+        XCTAssertFalse(AppUpdaterService.isVersion("v1.1.0", newerThan: "1.1.0"))
+        XCTAssertFalse(AppUpdaterService.isVersion("1.0.9", newerThan: "1.1.0"))
+        XCTAssertFalse(AppUpdaterService.isVersion("1.2.0-alpha.1", newerThan: "1.2.0"))
+
+        // SHA256SUMS.txt parsing & live file hashing
+        let tempFile = FileManager.default.temporaryDirectory.appendingPathComponent("rcleaner-sha-\(UUID().uuidString).bin")
+        defer { try? FileManager.default.removeItem(at: tempFile) }
+        try Data("hello r-cleaner".utf8).write(to: tempFile)
+        let hash = try AppUpdaterService.sha256Hex(ofFileAt: tempFile)
+        XCTAssertEqual(hash.count, 64)
+
+        let sumsText = """
+        \(hash)  R-Cleaner-1.2.0-universal.app.zip
+        0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef *dist/R-Cleaner-1.2.0-universal.dmg
+        """
+        let parsedSums = AppUpdaterService.parseSHA256Sums(sumsText)
+        XCTAssertEqual(parsedSums["R-Cleaner-1.2.0-universal.app.zip"], hash)
+        XCTAssertEqual(parsedSums["R-Cleaner-1.2.0-universal.dmg"], "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+
+        // GitHub Release API payload parsing
+        let payload = """
+        {
+          "tag_name": "v1.2.0",
+          "name": "R-Cleaner v1.2.0",
+          "body": "Added Dev & AI Sweeper and Automatic GitHub Releases Updater.",
+          "html_url": "https://github.com/resitdc/resitdc-mac-cleaner/releases/tag/v1.2.0",
+          "published_at": "2026-11-21T10:00:00Z",
+          "assets": [
+            {
+              "name": "R-Cleaner-1.2.0-universal.dmg",
+              "size": 7800000,
+              "browser_download_url": "https://github.com/resitdc/resitdc-mac-cleaner/releases/download/v1.2.0/R-Cleaner-1.2.0-universal.dmg"
+            },
+            {
+              "name": "R-Cleaner-1.2.0-universal.app.zip",
+              "size": 7600000,
+              "browser_download_url": "https://github.com/resitdc/resitdc-mac-cleaner/releases/download/v1.2.0/R-Cleaner-1.2.0-universal.app.zip"
+            },
+            {
+              "name": "SHA256SUMS.txt",
+              "size": 196,
+              "browser_download_url": "https://github.com/resitdc/resitdc-mac-cleaner/releases/download/v1.2.0/SHA256SUMS.txt"
+            }
+          ]
+        }
+        """
+        let release = try AppUpdaterService().parseReleaseJSON(Data(payload.utf8))
+        XCTAssertEqual(release.version, "1.2.0")
+        XCTAssertEqual(release.zipAssetName, "R-Cleaner-1.2.0-universal.app.zip")
+        XCTAssertEqual(release.dmgAssetName, "R-Cleaner-1.2.0-universal.dmg")
+        XCTAssertNotNil(release.checksumsURL)
+        XCTAssertTrue(release.supportsInPlaceInstall)
+    }
+
     func testAssistantHealthScoring() {
         let assistant = AssistantService()
         var telemetry = SystemTelemetrySnapshot()

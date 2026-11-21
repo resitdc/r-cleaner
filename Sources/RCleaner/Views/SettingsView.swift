@@ -31,7 +31,7 @@ public struct SettingsView: View {
             Divider()
 
             HStack {
-                Text("R-Cleaner v1.0 • Native macOS Care Suite")
+                Text("R-Cleaner v\(AppUpdaterService.currentAppVersion) • Native macOS Care Suite")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -56,6 +56,48 @@ public struct SettingsView: View {
                     Button("Replay Intro Tour") {
                         dismiss()
                         appState.replayIntro()
+                    }
+                }
+            }
+
+            Section("Software Updates (GitHub Releases)") {
+                Toggle("Automatically check for new releases on launch", isOn: $appState.settings.checkUpdatesAutomatically)
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let update = appState.availableUpdate {
+                            Text("Update Available: \(update.tagName)")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(Color(hex: "00D2A0"))
+                            Text("Installed: v\(AppUpdaterService.currentAppVersion) • Verified via GitHub Releases SHA-256")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else {
+                            Text("Installed Version: v\(AppUpdaterService.currentAppVersion) (build \(AppUpdaterService.currentBuildNumber))")
+                                .fontWeight(.semibold)
+                            if let checked = appState.lastUpdateCheckDate {
+                                Text("Last checked \(checked.formatted(date: .abbreviated, time: .shortened))")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("Checks github.com/\(AppUpdaterService.repoOwner)/\(AppUpdaterService.repoName)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                    Spacer()
+                    if let update = appState.availableUpdate {
+                        Button("Install \(update.tagName)") {
+                            dismiss()
+                            appState.updateState = .updateAvailable(update)
+                            appState.showUpdateSheet = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else {
+                        Button("Check Now") {
+                            dismiss()
+                            appState.checkForUpdates(userInitiated: true)
+                        }
                     }
                 }
             }

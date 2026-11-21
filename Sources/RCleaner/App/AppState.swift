@@ -16,14 +16,21 @@ public final class AppState: ObservableObject {
     public let cloudEmailService = CloudAndEmailService()
     public let assistantService = AssistantService()
     public let voiceService = VoiceAssistantService()
+    public let updaterService = AppUpdaterService()
 
     // Navigation & Global UI
     @Published public var selectedModule: RCleanerModule = .smartCare
     @Published public var showIntroFlow: Bool = true
     @Published public var showAssistantPopover: Bool = false
     @Published public var showSettingsWindow: Bool = false
+    @Published public var showUpdateSheet: Bool = false
     @Published public var isScreenCleaningActive: Bool = false
     @Published public var statusBannerMessage: String? = nil
+
+    // GitHub Releases Updater State
+    @Published public var updateState: AppUpdateState = .idle
+    @Published public var availableUpdate: AppReleaseInfo? = nil
+    @Published public var lastUpdateCheckDate: Date? = nil
 
     // Persisted Settings & Statistics
     @Published public var settings: RCleanerSettings {
@@ -123,6 +130,7 @@ public final class AppState: ObservableObject {
 
     private var telemetryTimer: Timer?
     private var activeTask: Task<Void, Never>?
+    private var updateTask: Task<Void, Never>?
     private var telemetryTickCount = 0
     private var isRefreshingTelemetry = false
 
@@ -150,6 +158,126 @@ public final class AppState: ObservableObject {
             }
         }
         refreshTelemetry(includeHeavy: true)
+
+        // Gentle background check for newer GitHub Releases after launch settles
+        if loadedSettings.checkUpdatesAutomatically {
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                self?.checkForUpdates(userInitiated: false)
+            }
+        }
+    }
+
+    // MARK: - Automatic GitHub Releases Updater
+
+    public func checkForUpdates(userInitiated: Bool) {
+        updateTask?.cancel()
+        if userInitiated {
+            showUpdateSheet = true
+            updateState = .checking
+        }
+
+        let service = updaterService
+        let skipped = settings.skippedUpdateVersion
+        updateTask = Task {
+            do {
+                let outcome = try await service.checkLatestRelease()
+                if Task.isCancelled { return }
+                await MainActor.run {
+                    self.lastUpdateCheckDate = Date()
+                    switch outcome {
+                    case .updateAvailable(let release):
+                        if userInitiated || release.version != skipped {
+                            self.availableUpdate = release
+                            self.updateState = .updateAvailable(release)
+                        } else {
+                            self.updateState = .idle
+                        }
+                    case .upToDate(let latest):
+                        self.availableUpdate = nil
+                        if userInitiated {
+                            self.updateState = .upToDate(latestVersion: latest)
+                        }
+                    case .noReleasesPublished:
+                        self.availableUpdate = nil
+                        if userInitiated {
+                            self.updateState = .upToDate(latestVersion: AppUpdaterService.currentAppVersion)
+                        }
+                    }
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                await MainActor.run {
+                    if userInitiated {
+                        self.updateState = .failed(message: error.localizedDescription)
+                    }
+                }
+            }
+        }
+    }
+
+    public func installAvailableUpdate(_ release: AppReleaseInfo) {
+        updateTask?.cancel()
+        let service = updaterService
+        updateState = .downloading(release: release, progress: 0.01, downloadedBytes: 0, totalBytes: release.preferredAssetSizeBytes)
+
+        updateTask = Task {
+            do {
+                let outcome = try await service.downloadVerifyAndInstall(
+                    release: release,
+                    onProgress: { pct, dl, total in
+                        Task { @MainActor in
+                            self.updateState = .downloading(release: release, progress: pct, downloadedBytes: dl, totalBytes: total)
+                        }
+                    },
+                    onVerifying: {
+                        Task { @MainActor in
+                            self.updateState = .verifying(release: release)
+                        }
+                    },
+                    onInstalling: {
+                        Task { @MainActor in
+                            self.updateState = .installing(release: release)
+                        }
+                    }
+                )
+                if Task.isCancelled { return }
+                await MainActor.run {
+                    switch outcome {
+                    case .launchedRelaunchScript:
+                        // Terminate cleanly so the detached atomic updater script swaps and relaunches R-Cleaner
+                        NSApp.terminate(nil)
+                    case .revealInFinder(let fileURL, let note):
+                        self.updateState = .readyToReveal(release: release, fileURL: fileURL, note: note)
+                    }
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    self.updateState = .updateAvailable(release)
+                }
+            } catch {
+                await MainActor.run {
+                    self.updateState = .failed(message: error.localizedDescription)
+                }
+            }
+        }
+    }
+
+    public func skipUpdateVersion(_ version: String) {
+        settings.skippedUpdateVersion = AppUpdaterService.normalizeVersion(version)
+        availableUpdate = nil
+        updateState = .idle
+        showBanner("Skipped v\(settings.skippedUpdateVersion)")
+    }
+
+    public func cancelUpdateInstall() {
+        updateTask?.cancel()
+        if let release = availableUpdate {
+            updateState = .updateAvailable(release)
+        } else {
+            updateState = .idle
+        }
     }
 
     // MARK: - Telemetry Loop
