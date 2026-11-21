@@ -116,7 +116,18 @@ final class RCleanerTests: XCTestCase {
         XCTAssertTrue(briefing.contains("95 percent"))
         XCTAssertTrue(briefing.contains("nominal"))
 
-        // Verify all 15 bundled Jarvis neural voice clips are included inside the app bundle
+        // Verify live modular briefing cue selection adapts to telemetry
+        let healthyCues = VoiceAssistantService.briefingCues(telemetry: snap, healthScore: 95, threatsCount: 0)
+        XCTAssertEqual(healthyCues, [.briefingHealthExcellent, .briefingStoragePlenty, .briefingPerfNominal, .briefingOutroNominal])
+
+        var stressedSnap = snap
+        stressedSnap.storage.availableBytes = 5_000_000_000
+        stressedSnap.cpu.userPercent = 70
+        stressedSnap.cpu.systemPercent = 18
+        let stressedCues = VoiceAssistantService.briefingCues(telemetry: stressedSnap, healthScore: 42, threatsCount: 2)
+        XCTAssertEqual(stressedCues, [.briefingHealthAttention, .briefingStorageLow, .briefingPerfHeavy, .briefingOutroThreats])
+
+        // Verify all 27 bundled Jarvis neural voice clips are included inside the app bundle
         XCTAssertEqual(VoiceAssistantService.bundledClipCount, VoiceCue.allCases.count)
         for cue in VoiceCue.allCases {
             XCTAssertNotNil(VoiceAssistantService.bundledClipURL(for: cue), "Missing bundled voice clip: \(cue.rawValue).m4a")

@@ -27,6 +27,20 @@ public enum VoiceCue: String, CaseIterable {
     case briefingNominal = "briefing_nominal"
     case voiceTest = "voice_test"
 
+    // Modular live system briefing segments (stitched seamlessly in the exact same voice)
+    case briefingHealthExcellent = "briefing_health_excellent"
+    case briefingHealthGood = "briefing_health_good"
+    case briefingHealthFair = "briefing_health_fair"
+    case briefingHealthAttention = "briefing_health_attention"
+    case briefingStoragePlenty = "briefing_storage_plenty"
+    case briefingStorageModerate = "briefing_storage_moderate"
+    case briefingStorageLow = "briefing_storage_low"
+    case briefingPerfNominal = "briefing_perf_nominal"
+    case briefingPerfModerate = "briefing_perf_moderate"
+    case briefingPerfHeavy = "briefing_perf_heavy"
+    case briefingOutroNominal = "briefing_outro_nominal"
+    case briefingOutroThreats = "briefing_outro_threats"
+
     public var transcript: String {
         switch self {
         case .introMorning:
@@ -59,6 +73,30 @@ public enum VoiceCue: String, CaseIterable {
             return "All core subsystems are operating within nominal parameters sir."
         case .voiceTest:
             return "At your service sir. R-Cleaner built-in neural voice core and HUD audio telemetry are fully operational."
+        case .briefingHealthExcellent:
+            return "System briefing sir. Overall Mac health is excellent."
+        case .briefingHealthGood:
+            return "System briefing sir. Overall Mac health is in good condition."
+        case .briefingHealthFair:
+            return "System briefing sir. Overall Mac health is fair and could use a quick tune-up."
+        case .briefingHealthAttention:
+            return "System briefing sir. Your Mac requires attention and I recommend running Smart Care."
+        case .briefingStoragePlenty:
+            return "Storage reserves are plentiful."
+        case .briefingStorageModerate:
+            return "Storage capacity is moderate."
+        case .briefingStorageLow:
+            return "Warning. Available disk space is running low."
+        case .briefingPerfNominal:
+            return "Processor load and memory pressure are both nominal."
+        case .briefingPerfModerate:
+            return "Processor activity is elevated while memory remains balanced."
+        case .briefingPerfHeavy:
+            return "System resources are under heavy load. Freeing up memory is advised."
+        case .briefingOutroNominal:
+            return "All core subsystems are online and operating smoothly."
+        case .briefingOutroThreats:
+            return "Security sensors flagged potential threats awaiting your review."
         }
     }
 
@@ -179,17 +217,69 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
     /// Plays a bundled studio Jarvis neural voice clip with HUD audio DSP, falling back to TTS
     /// if the user customized their address title or disabled the bundled voice pack.
     public func playCue(_ cue: VoiceCue, settings: RCleanerSettings, fallbackText: String? = nil, interrupt: Bool = true) {
-        guard settings.enableVoiceAssistant else { return }
+        playCueSequence([cue], settings: settings, fallbackText: fallbackText, interrupt: interrupt)
+    }
+
+    /// Plays a seamless sequence of bundled studio Jarvis voice clips (e.g., live telemetry briefing)
+    /// so the voice stays 100% consistent across the entire app with zero voice switching.
+    public func playCueSequence(_ cues: [VoiceCue], settings: RCleanerSettings, fallbackText: String? = nil, interrupt: Bool = true) {
+        guard settings.enableVoiceAssistant, !cues.isEmpty else { return }
 
         let normalizedAddress = settings.voiceAddressTitle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let usesDefaultSir = normalizedAddress.isEmpty || normalizedAddress == "sir"
 
-        if settings.useBundledVoicePack, usesDefaultSir, let clipURL = Self.bundledClipURL(for: cue) {
-            playBundledAudio(url: clipURL, transcript: cue.transcript, settings: settings, interrupt: interrupt)
-        } else {
-            let text = fallbackText ?? cue.transcript.replacingOccurrences(of: "sir", with: settings.voiceAddressTitle)
-            speak(text, settings: settings, interrupt: interrupt)
+        if settings.useBundledVoicePack, usesDefaultSir {
+            let urls = cues.compactMap { Self.bundledClipURL(for: $0) }
+            if urls.count == cues.count {
+                let transcript = cues.map(\.transcript).joined(separator: " ")
+                playBundledAudioSequence(urls: urls, transcript: transcript, settings: settings, interrupt: interrupt)
+                return
+            }
         }
+
+        let fallback = fallbackText
+            ?? cues.map(\.transcript).joined(separator: " ")
+                .replacingOccurrences(of: "sir", with: settings.voiceAddressTitle)
+        speak(fallback, settings: settings, interrupt: interrupt)
+    }
+
+    /// Selects the exact real-time studio Jarvis briefing segments matching current Mac telemetry.
+    public static func briefingCues(
+        telemetry: SystemTelemetrySnapshot,
+        healthScore: Int,
+        threatsCount: Int
+    ) -> [VoiceCue] {
+        let healthCue: VoiceCue
+        switch healthScore {
+        case 85...100: healthCue = .briefingHealthExcellent
+        case 70..<85: healthCue = .briefingHealthGood
+        case 50..<70: healthCue = .briefingHealthFair
+        default: healthCue = .briefingHealthAttention
+        }
+
+        let freeGB = Double(telemetry.storage.availableBytes) / 1_000_000_000.0
+        let storageCue: VoiceCue
+        if freeGB >= 50 {
+            storageCue = .briefingStoragePlenty
+        } else if freeGB >= 15 {
+            storageCue = .briefingStorageModerate
+        } else {
+            storageCue = .briefingStorageLow
+        }
+
+        let cpu = telemetry.cpu.totalLoadPercent
+        let pressure = telemetry.memory.pressureLabel.lowercased()
+        let perfCue: VoiceCue
+        if cpu >= 80 || pressure.contains("high") || pressure.contains("critical") {
+            perfCue = .briefingPerfHeavy
+        } else if cpu >= 50 || pressure.contains("moderate") || pressure.contains("warn") {
+            perfCue = .briefingPerfModerate
+        } else {
+            perfCue = .briefingPerfNominal
+        }
+
+        let outroCue: VoiceCue = threatsCount > 0 ? .briefingOutroThreats : .briefingOutroNominal
+        return [healthCue, storageCue, perfCue, outroCue]
     }
 
     /// Speaks dynamic text (such as live system telemetry numbers) using macOS built-in speech synthesis.
@@ -294,14 +384,19 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
         }
     }
 
-    private func playBundledAudio(url: URL, transcript: String, settings: RCleanerSettings, interrupt: Bool) {
+    private func playBundledAudioSequence(urls: [URL], transcript: String, settings: RCleanerSettings, interrupt: Bool) {
         if interrupt {
             stop()
         }
 
         guard ensureAudioEngine(hudEffectsEnabled: settings.enableVoiceHudEffects),
-              let player = voicePlayerNode,
-              let file = try? AVAudioFile(forReading: url) else {
+              let player = voicePlayerNode else {
+            speak(transcript, settings: settings, interrupt: interrupt)
+            return
+        }
+
+        let files = urls.compactMap { try? AVAudioFile(forReading: $0) }
+        guard files.count == urls.count, !files.isEmpty else {
             speak(transcript, settings: settings, interrupt: interrupt)
             return
         }
@@ -316,10 +411,16 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
         isSpeaking = true
 
         player.stop()
-        player.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, self.playbackGeneration == gen else { return }
-                self.isSpeaking = false
+        for (idx, file) in files.enumerated() {
+            if idx == files.count - 1 {
+                player.scheduleFile(file, at: nil, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+                    Task { @MainActor [weak self] in
+                        guard let self, self.playbackGeneration == gen else { return }
+                        self.isSpeaking = false
+                    }
+                }
+            } else {
+                player.scheduleFile(file, at: nil, completionHandler: nil)
             }
         }
         player.volume = 1.0

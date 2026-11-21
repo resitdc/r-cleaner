@@ -246,12 +246,17 @@ public final class AppState: ObservableObject {
             voiceService.stop()
             return
         }
-        let line = VoiceAssistantService.systemBriefing(
+        let cues = VoiceAssistantService.briefingCues(
+            telemetry: telemetry,
+            healthScore: healthScore,
+            threatsCount: protectionResult.threats.count
+        )
+        let fallbackLine = VoiceAssistantService.systemBriefing(
             telemetry: telemetry,
             healthScore: healthScore,
             address: settings.voiceAddressTitle
         )
-        speak(line)
+        voiceService.playCueSequence(cues, settings: settings, fallbackText: fallbackLine)
     }
 
     public func testBundledJarvisVoice() {
