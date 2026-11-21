@@ -390,32 +390,35 @@ public struct MyClutterView: View {
         let selectedBytes = selected.reduce(0) { $0 + $1.sizeBytes }
 
         return VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                Picker("Size", selection: $sizeFilter) {
-                    ForEach(SizeFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.menu)
-                .frame(width: 155)
-
-                Picker("Access Date", selection: $accessDateFilter) {
-                    ForEach(AccessDateFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.menu)
-                .frame(width: 145)
-
-                ForEach(["All", "Videos", "Archives", "Documents", "Pictures", "Other"], id: \.self) { kind in
-                    Button { kindFilter = kind } label: {
-                        Text(kind)
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 9).padding(.vertical, 4)
-                            .background(Capsule().fill(kindFilter == kind ? palette.primary.opacity(0.75) : Color.white.opacity(0.08)))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    Picker("Size", selection: $sizeFilter) {
+                        ForEach(SizeFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
-                    .buttonStyle(.plain)
+                    .pickerStyle(.menu)
+                    .frame(width: 155)
+
+                    Picker("Access Date", selection: $accessDateFilter) {
+                        ForEach(AccessDateFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.menu)
+                    .frame(width: 145)
+
+                    ForEach(["All", "Videos", "Archives", "Documents", "Pictures", "Other"], id: \.self) { kind in
+                        Button { kindFilter = kind } label: {
+                            Text(kind)
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 10).padding(.vertical, 5)
+                                .background(Capsule().fill(kindFilter == kind ? palette.primary.opacity(0.75) : Color.white.opacity(0.08)))
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
-                Spacer()
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 24)
 
             ScrollView {
                 LazyVStack(spacing: 7) {
@@ -456,18 +459,26 @@ public struct MyClutterView: View {
         let selectedBytes = selected.reduce(0) { $0 + $1.sizeBytes }
 
         return VStack(spacing: 10) {
-            HStack(spacing: 6) {
-                ForEach(sources, id: \.self) { src in
-                    Button(src) { downloadSourceFilter = src }
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(Capsule().fill(downloadSourceFilter == src ? palette.primary.opacity(0.75) : Color.white.opacity(0.08)))
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 7) {
+                    ForEach(sources, id: \.self) { src in
+                        Button {
+                            downloadSourceFilter = src
+                        } label: {
+                            Text(src)
+                                .font(.system(size: 11.5, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 5)
+                                .background(Capsule().fill(downloadSourceFilter == src ? palette.primary.opacity(0.82) : Color.white.opacity(0.09)))
+                        }
                         .buttonStyle(.plain)
+                    }
                 }
-                Spacer()
+                .padding(.horizontal, 24)
             }
-            .padding(.horizontal, 24)
 
             ScrollView {
                 LazyVStack(spacing: 7) {

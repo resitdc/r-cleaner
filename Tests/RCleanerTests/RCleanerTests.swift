@@ -72,6 +72,18 @@ final class RCleanerTests: XCTestCase {
         XCTAssertFalse(service.terminateProcess(pid: getpid()))
     }
 
+    func testQuarantineSourceNormalization() {
+        // Empty agent field with UUID in slot 4 must NOT leak the UUID
+        XCTAssertEqual(ClutterScannerService.normalizeQuarantineRaw("0083;66123abc;;53284369-0D70-4BD4-9B4F-C0E93175221F"), "Downloads")
+        // Internal macOS daemon & bundle IDs normalize cleanly
+        XCTAssertEqual(ClutterScannerService.normalizeQuarantineRaw("0083;66123abc;sharingd;UUID"), "AirDrop")
+        XCTAssertEqual(ClutterScannerService.normalizeQuarantineRaw("0083;66123abc;com.apple.photos.ImageConversionService;UUID"), "Photos")
+        XCTAssertEqual(ClutterScannerService.normalizeQuarantineRaw("0083;66123abc;PhotosPluginAddToPhotos;UUID"), "Photos")
+        XCTAssertEqual(ClutterScannerService.normalizeQuarantineRaw("0083;66123abc;Google Chrome;UUID"), "Chrome")
+        XCTAssertEqual(ClutterScannerService.normalizeQuarantineRaw("0083;66123abc;Microsoft Word;UUID"), "Word")
+        XCTAssertEqual(ClutterScannerService.normalizeQuarantineRaw("0083;66123abc;com.vendor.SomeInternalHelper;UUID"), "Other Apps")
+    }
+
     func testDuplicateFinderDetectsExactCopies() throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("rcleaner-dup-\(UUID().uuidString)")
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)

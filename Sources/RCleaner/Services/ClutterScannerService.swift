@@ -380,16 +380,46 @@ public final class ClutterScannerService {
         var buf = [CChar](repeating: 0, count: len + 1)
         guard getxattr(path, attrName, &buf, len, 0, 0) > 0 else { return "Downloads" }
         let raw = String(cString: buf)
-        let parts = raw.split(separator: ";")
-        if parts.count >= 3 {
-            let agent = String(parts[2]).trimmingCharacters(in: .whitespaces)
-            if agent.localizedCaseInsensitiveContains("Safari") { return "Safari" }
-            if agent.localizedCaseInsensitiveContains("Chrome") { return "Google Chrome" }
-            if agent.localizedCaseInsensitiveContains("Slack") { return "Slack" }
-            if agent.localizedCaseInsensitiveContains("Firefox") { return "Firefox" }
-            if !agent.isEmpty { return agent }
+        return Self.normalizeQuarantineRaw(raw)
+    }
+
+    /// Parses macOS `com.apple.quarantine` (`flags;timestamp;agent;uuid`) without collapsing empty fields,
+    /// filtering out raw UUIDs and normalizing internal macOS daemons into human-readable app labels.
+    public static func normalizeQuarantineRaw(_ raw: String) -> String {
+        let parts = raw.split(separator: ";", omittingEmptySubsequences: false)
+        guard parts.count >= 3 else { return "Downloads" }
+        let agent = String(parts[2]).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !agent.isEmpty, UUID(uuidString: agent) == nil else { return "Downloads" }
+
+        let lower = agent.lowercased()
+        if lower.contains("safari") { return "Safari" }
+        if lower.contains("chrome") { return "Chrome" }
+        if lower.contains("firefox") { return "Firefox" }
+        if lower.contains("arc") && lower.count <= 12 { return "Arc" }
+        if lower.contains("brave") { return "Brave" }
+        if lower.contains("edge") { return "Edge" }
+        if lower.contains("slack") { return "Slack" }
+        if lower.contains("whatsapp") { return "WhatsApp" }
+        if lower.contains("telegram") { return "Telegram" }
+        if lower.contains("discord") { return "Discord" }
+        if lower == "sharingd" || lower.contains("airdrop") { return "AirDrop" }
+        if lower.contains("photos") { return "Photos" }
+        if lower.contains("mail") { return "Mail" }
+        if lower.contains("preview") { return "Preview" }
+        if lower.contains("voicememos") || lower.contains("voice memos") { return "Voice Memos" }
+        if lower.contains("unarchiver") { return "The Unarchiver" }
+        if lower.contains("microsoft word") { return "Word" }
+        if lower.contains("microsoft excel") { return "Excel" }
+        if lower.contains("microsoft powerpoint") { return "PowerPoint" }
+
+        // Avoid displaying raw reverse-DNS bundle IDs or long helper daemon names as filter pills
+        if agent.contains(".") && (lower.hasPrefix("com.") || lower.hasPrefix("org.") || lower.hasPrefix("net.")) {
+            return "Other Apps"
         }
-        return "Downloads"
+        if agent.count > 22 {
+            return "Other Apps"
+        }
+        return agent
     }
 
     // MARK: - Remove Selected Clutter

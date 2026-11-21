@@ -306,13 +306,19 @@ public struct ProtectionView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 6) {
                     ForEach(kinds, id: \.self) { kind in
-                        Button(kind) { permissionFilter = kind }
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Capsule().fill(permissionFilter == kind ? palette.primary.opacity(0.75) : Color.white.opacity(0.08)))
-                            .buttonStyle(.plain)
+                        Button {
+                            permissionFilter = kind
+                        } label: {
+                            Text(kind)
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 5)
+                                .background(Capsule().fill(permissionFilter == kind ? palette.primary.opacity(0.75) : Color.white.opacity(0.08)))
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(.horizontal, 24)

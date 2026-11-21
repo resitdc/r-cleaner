@@ -221,27 +221,31 @@ public struct CleanupView: View {
 
             // Category Pills + Search + Sort Bar
             HStack(spacing: 10) {
-                ForEach(appState.cleanupCategories) { cat in
-                    Button {
-                        selectedCategoryID = cat.id
-                        selectedGroupID = cat.groups.first?.id
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: cat.iconName)
-                            Text(cat.title)
-                            Text(ByteFormat.string(cat.totalBytes))
-                                .foregroundStyle(.white.opacity(0.7))
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(appState.cleanupCategories) { cat in
+                            Button {
+                                selectedCategoryID = cat.id
+                                selectedGroupID = cat.groups.first?.id
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: cat.iconName)
+                                    Text(cat.title)
+                                    Text(ByteFormat.string(cat.totalBytes))
+                                        .foregroundStyle(.white.opacity(0.7))
+                                }
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .lineLimit(1)
+                                .fixedSize(horizontal: true, vertical: false)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 7)
+                                .background(Capsule().fill(selectedCategoryID == cat.id ? palette.primary.opacity(0.75) : Color.white.opacity(0.10)))
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Capsule().fill(selectedCategoryID == cat.id ? palette.primary.opacity(0.75) : Color.white.opacity(0.10)))
                     }
-                    .buttonStyle(.plain)
                 }
-
-                Spacer()
 
                 HStack(spacing: 6) {
                     Image(systemName: "magnifyingglass").foregroundStyle(.white.opacity(0.6))
