@@ -1,0 +1,134 @@
+name: Release — Build & Publish macOS .dmg + .app
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish Universal macOS Release
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Determine release version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            RAW_TAG="${{ inputs.version }}"
+          else
+            RAW_TAG="${GITHUB_REF_NAME}"
+          fi
+          TAG="${RAW_TAG#refs/tags/}"
+          if [[ "$TAG" != v* ]]; then
+            TAG="v${TAG}"
+          fi
+          CLEAN_VER="${TAG#v}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "version=${CLEAN_VER}" >> "$GITHUB_OUTPUT"
+          echo "Releasing tag=${TAG} version=${CLEAN_VER}"
+
+      - name: Run Swift unit tests
+        run: swift test
+
+      - name: Import Apple Developer ID certificate (optional)
+        id: signing
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          if [[ -n "$MACOS_CERTIFICATE_P12" && -n "$MACOS_SIGNING_IDENTITY" ]]; then
+            KEYCHAIN_PATH="$RUNNER_TEMP/rcleaner-signing.keychain-db"
+            KEYCHAIN_PASS="$(uuidgen)"
+            CERT_PATH="$RUNNER_TEMP/certificate.p12"
+
+            echo "$MACOS_CERTIFICATE_P12" | base64 --decode > "$CERT_PATH"
+            security create-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+            security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+            security unlock-keychain -p "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+            security import "$CERT_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+            security list-keychain -d user -s "$KEYCHAIN_PATH"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASS" "$KEYCHAIN_PATH"
+            rm -f "$CERT_PATH"
+
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "keychain=${KEYCHAIN_PATH}" >> "$GITHUB_OUTPUT"
+            echo "Developer ID signing configured."
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "No Developer ID secrets found — using ad-hoc signing."
+          fi
+
+      - name: Build Universal R-Cleaner.app & .dmg
+        env:
+          UNIVERSAL: "1"
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          APP_BUILD_NUMBER: ${{ github.run_number }}
+          CODESIGN_IDENTITY: ${{ steps.signing.outputs.enabled == 'true' && secrets.MACOS_SIGNING_IDENTITY || '' }}
+        run: |
+          chmod +x scripts/build_app.sh scripts/build_dmg.sh
+          ./scripts/build_app.sh release
+          ./scripts/build_dmg.sh
+
+      - name: Notarize DMG with Apple notarytool (optional)
+        if: steps.signing.outputs.enabled == 'true'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APP_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [[ -n "$APPLE_ID" && -n "$APPLE_APP_SPECIFIC_PASSWORD" && -n "$APPLE_TEAM_ID" ]]; then
+            DMG_PATH="dist/R-Cleaner-${APP_VERSION}-universal.dmg"
+            xcrun notarytool submit "$DMG_PATH" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_APP_SPECIFIC_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait
+            xcrun stapler staple "$DMG_PATH"
+            xcrun stapler validate "$DMG_PATH"
+          else
+            echo "Apple notarization secrets not set — skipping notarization."
+          fi
+
+      - name: Clean up temporary keychain
+        if: always() && steps.signing.outputs.enabled == 'true'
+        run: |
+          security delete-keychain "${{ steps.signing.outputs.keychain }}" || true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: R-Cleaner ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            ## R-Cleaner ${{ steps.version.outputs.tag }} (macOS Universal — Apple Silicon & Intel)
+
+            ### Installation
+            1. Download **`R-Cleaner-${{ steps.version.outputs.version }}-universal.dmg`** (or `.app.zip`).
+            2. Open the `.dmg` and drag **R-Cleaner** into your **Applications** folder.
+            3. Launch **R-Cleaner** from Applications (requires macOS 14.0 Sonoma or later).
+
+            > **Note (Ad-hoc signed builds):** If macOS Gatekeeper warns that the developer cannot be verified, right-click `R-Cleaner.app` → **Open**, or run:
+            > ```bash
+            > xattr -cr /Applications/R-Cleaner.app
+            > ```
+          files: |
+            dist/R-Cleaner-${{ steps.version.outputs.version }}-universal.dmg
+            dist/R-Cleaner-${{ steps.version.outputs.version }}-universal.app.zip
+            dist/SHA256SUMS.txt

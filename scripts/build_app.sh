@@ -7,19 +7,33 @@ cd "$ROOT_DIR"
 CONFIG="${1:-release}"
 APP_NAME="R-Cleaner"
 BUNDLE_ID="com.resitdc.r-cleaner"
+APP_VERSION="${APP_VERSION:-1.0.0}"
+APP_VERSION="${APP_VERSION#v}"
+APP_BUILD_NUMBER="${APP_BUILD_NUMBER:-100}"
+UNIVERSAL="${UNIVERSAL:-0}"
+CODESIGN_IDENTITY="${CODESIGN_IDENTITY:-}"
+
 DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/${APP_NAME}.app"
 
-echo "==> Building R-Cleaner ($CONFIG)..."
-swift build -c "$CONFIG"
+BUILD_ARGS=(-c "$CONFIG")
+if [[ "$UNIVERSAL" == "1" ]]; then
+    echo "==> Building ${APP_NAME} ($CONFIG, universal arm64 + x86_64)..."
+    BUILD_ARGS+=(--arch arm64 --arch x86_64)
+else
+    echo "==> Building ${APP_NAME} ($CONFIG, native $(uname -m))..."
+fi
 
-BIN_PATH="$(swift build -c "$CONFIG" --show-bin-path)/RCleaner"
+swift build "${BUILD_ARGS[@]}"
+
+BIN_DIR="$(swift build "${BUILD_ARGS[@]}" --show-bin-path)"
+BIN_PATH="${BIN_DIR}/RCleaner"
 if [[ ! -f "$BIN_PATH" ]]; then
     echo "Error: Built executable not found at $BIN_PATH"
     exit 1
 fi
 
-echo "==> Packaging ${APP_NAME}.app..."
+echo "==> Packaging ${APP_NAME}.app (v${APP_VERSION}, build ${APP_BUILD_NUMBER})..."
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 
@@ -32,7 +46,7 @@ if [[ -d "$ROOT_DIR/Sources/RCleaner/Resources/VoicePack" ]]; then
 fi
 
 # Copy SwiftPM resource bundle if generated alongside the binary
-RESOURCE_BUNDLE="$(swift build -c "$CONFIG" --show-bin-path)/RCleaner_RCleaner.bundle"
+RESOURCE_BUNDLE="${BIN_DIR}/RCleaner_RCleaner.bundle"
 if [[ -d "$RESOURCE_BUNDLE" ]]; then
     cp -R "$RESOURCE_BUNDLE" "$APP_DIR/Contents/Resources/"
 fi
@@ -66,9 +80,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>${APP_VERSION}</string>
     <key>CFBundleVersion</key>
-    <string>100</string>
+    <string>${APP_BUILD_NUMBER}</string>
     <key>LSApplicationCategoryType</key>
     <string>public.app-category.utilities</string>
     <key>LSMinimumSystemVersion</key>
@@ -89,8 +103,17 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
 </plist>
 EOF
 
-echo "==> Ad-hoc code signing ${APP_NAME}.app..."
-codesign --force --deep --sign - "$APP_DIR"
+if [[ -n "$CODESIGN_IDENTITY" ]]; then
+    echo "==> Code signing ${APP_NAME}.app with Developer ID (${CODESIGN_IDENTITY})..."
+    codesign --force --deep --options runtime --timestamp --sign "$CODESIGN_IDENTITY" "$APP_DIR"
+else
+    echo "==> Ad-hoc code signing ${APP_NAME}.app..."
+    codesign --force --deep --sign - "$APP_DIR"
+fi
+
+echo "==> Verifying code signature & architecture..."
+codesign --verify --deep --strict "$APP_DIR"
+file "$APP_DIR/Contents/MacOS/${APP_NAME}"
 
 echo "==> Done! App bundle created at: $APP_DIR"
 echo "    Launch with: open \"$APP_DIR\""

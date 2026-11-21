@@ -1,0 +1,69 @@
+name: CI — Build, Test & Package macOS App
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build, Test & Package (.app + .dmg)
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Show toolchain versions
+        run: |
+          sw_vers
+          xcodebuild -version
+          swift --version
+
+      - name: Run Swift unit tests
+        run: swift test
+
+      - name: Build Universal R-Cleaner.app (arm64 + x86_64)
+        env:
+          UNIVERSAL: "1"
+          APP_VERSION: "1.0.0"
+          APP_BUILD_NUMBER: ${{ github.run_number }}
+        run: |
+          chmod +x scripts/build_app.sh scripts/build_dmg.sh
+          ./scripts/build_app.sh release
+
+      - name: Verify bundled VoicePack inside R-Cleaner.app
+        run: |
+          CLIP_COUNT=$(ls -1 dist/R-Cleaner.app/Contents/Resources/VoicePack/*.m4a | wc -l | tr -d ' ')
+          echo "Bundled VoicePack clips: ${CLIP_COUNT}"
+          test "${CLIP_COUNT}" -ge 15
+
+      - name: Package .dmg and .app.zip
+        env:
+          UNIVERSAL: "1"
+          APP_VERSION: "1.0.0"
+        run: ./scripts/build_dmg.sh
+
+      - name: Upload macOS DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: R-Cleaner-macOS-DMG
+          path: |
+            dist/*.dmg
+            dist/SHA256SUMS.txt
+          retention-days: 14
+
+      - name: Upload macOS App ZIP artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: R-Cleaner-macOS-App-ZIP
+          path: |
+            dist/*.app.zip
+            dist/SHA256SUMS.txt
+          retention-days: 14
