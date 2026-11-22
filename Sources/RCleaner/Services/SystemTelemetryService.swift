@@ -11,10 +11,15 @@ public final class SystemTelemetryService {
     private var prevNetBytes: (inBytes: UInt64, outBytes: UInt64, timestamp: Date)?
     private var prevProcessNet: (samples: [Int32: (inBytes: Int64, outBytes: Int64)], timestamp: Date)?
     private var cpuHistory: [Double] = Array(repeating: 0, count: 30)
+    private var cachedTrashState: (mtimeSec: Int, mtimeNsec: Int, bytes: Int64)?
+    private var cachedWifiInfo: (name: String, type: String, security: String, timestamp: Date)?
 
     public init() {}
 
-    public func captureSnapshot(includeProcessesAndDrives: Bool = true) -> SystemTelemetrySnapshot {
+    public func captureSnapshot(
+        includeProcessesAndDrives: Bool = true,
+        includeNetworkProcesses: Bool = false
+    ) -> SystemTelemetrySnapshot {
         var snap = SystemTelemetrySnapshot()
         snap.cpu = readCPU()
         snap.memory = readMemory()
@@ -26,7 +31,9 @@ public final class SystemTelemetryService {
             let (topCPU, topMem) = readTopProcesses()
             snap.topCPUConsumers = topCPU
             snap.topMemoryConsumers = topMem
-            snap.topNetworkConsumers = readPerAppNetworkBandwidth()
+            if includeNetworkProcesses {
+                snap.topNetworkConsumers = readPerAppNetworkBandwidth()
+            }
             snap.externalDrives = readExternalDrives()
         }
         snap.lastUpdated = Date()
@@ -144,8 +151,24 @@ public final class SystemTelemetryService {
             reading.availableBytes = max(important, direct)
             reading.purgeableBytes = max(0, important - direct)
         }
-        let trashURL = URL(fileURLWithPath: FileSystemHelpers.expand("~/.Trash"))
-        reading.trashBytes = FileSystemHelpers.directorySize(at: trashURL, maxFiles: 2500)
+        let trashPath = FileSystemHelpers.expand("~/.Trash")
+        var st = stat()
+        if lstat(trashPath, &st) == 0 {
+            let sec = st.st_mtimespec.tv_sec
+            let nsec = st.st_mtimespec.tv_nsec
+            stateLock.lock()
+            let cached = cachedTrashState
+            stateLock.unlock()
+            if let cached, cached.mtimeSec == sec, cached.mtimeNsec == nsec {
+                reading.trashBytes = cached.bytes
+            } else {
+                let measured = FileSystemHelpers.directorySize(at: URL(fileURLWithPath: trashPath), maxFiles: 1200)
+                stateLock.lock()
+                cachedTrashState = (sec, nsec, measured)
+                stateLock.unlock()
+                reading.trashBytes = measured
+            }
+        }
         return reading
     }
 
@@ -257,7 +280,15 @@ public final class SystemTelemetryService {
         reading.interfaceName = activeIface
         reading.isConnected = hasUpNonLoopback
 
-        if let wifi = CWWiFiClient.shared().interface() {
+        stateLock.lock()
+        let cachedWifi = cachedWifiInfo
+        stateLock.unlock()
+
+        if let cachedWifi, now.timeIntervalSince(cachedWifi.timestamp) < 30.0 {
+            reading.networkName = cachedWifi.name
+            reading.connectionType = cachedWifi.type
+            reading.securityRating = cachedWifi.security
+        } else if let wifi = CWWiFiClient.shared().interface() {
             if let ssid = wifi.ssid(), !ssid.isEmpty {
                 reading.networkName = ssid
                 reading.connectionType = "Wi-Fi"
@@ -280,6 +311,9 @@ public final class SystemTelemetryService {
                 reading.connectionType = "Wired"
                 reading.securityRating = "Strong"
             }
+            stateLock.lock()
+            cachedWifiInfo = (reading.networkName, reading.connectionType, reading.securityRating, now)
+            stateLock.unlock()
         }
 
         return reading

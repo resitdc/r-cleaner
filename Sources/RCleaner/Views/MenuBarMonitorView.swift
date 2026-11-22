@@ -285,7 +285,7 @@ public struct MenuBarMonitorView: View {
                     onAction: { appState.runNetworkSpeedTest() },
                     onTap: {
                         expandedCard = .network
-                        appState.refreshTelemetry(includeHeavy: true)
+                        appState.refreshTelemetry(includeHeavy: true, includeNetworkProcesses: true)
                         appState.refreshListeningPorts(silent: true)
                     }
                 )
@@ -541,7 +541,7 @@ public struct MenuBarMonitorView: View {
                 HStack {
                     Text("Per-App Live Bandwidth").font(.caption.bold()).foregroundStyle(.secondary)
                     Spacer()
-                    Button("Refresh") { appState.refreshTelemetry(includeHeavy: true) }
+                    Button("Refresh") { appState.refreshTelemetry(includeHeavy: true, includeNetworkProcesses: true) }
                         .font(.caption2)
                         .buttonStyle(.link)
                 }

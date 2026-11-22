@@ -14,7 +14,7 @@ public struct PortKillerView: View {
     @State private var confirmForceKillItem: ActivePortItem? = nil
     @State private var confirmStopAllDevServers: Bool = false
     private let palette = RCleanerTheme.palette(for: .portKiller)
-    private let refreshTimer = Timer.publish(every: 4.0, on: .main, in: .common).autoconnect()
+    private let refreshTimer = Timer.publish(every: 6.0, tolerance: 1.5, on: .main, in: .common).autoconnect()
 
     private enum ViewMode: String, CaseIterable, Identifiable {
         case plasmaBubbles = "Bubbles"
@@ -92,7 +92,10 @@ public struct PortKillerView: View {
             appState.refreshListeningPorts()
         }
         .onReceive(refreshTimer) { _ in
-            guard autoRefreshEnabled, appState.selectedModule == .portKiller, poppingPortIDs.isEmpty else { return }
+            guard autoRefreshEnabled,
+                  appState.selectedModule == .portKiller,
+                  poppingPortIDs.isEmpty,
+                  NSApp.isActive else { return }
             appState.refreshListeningPorts(silent: true)
         }
         .alert(
@@ -1513,6 +1516,7 @@ private struct PortBubbleInspectorCard: View {
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(highlight ?? .white.opacity(0.90))
                 .lineLimit(1)
+                .minimumScaleFactor(0.72)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)

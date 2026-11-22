@@ -526,14 +526,15 @@ public struct ModuleHeaderBar: View {
     }
 }
 
-// MARK: - Cached Native macOS File / App / Folder Icon View
+// MARK: - Cached Native macOS File / App / Folder Icon View (Compressed Single-Rep Bitmaps)
 
 public final class NativeIconCache {
     public static let shared = NativeIconCache()
     private let cache = NSCache<NSString, NSImage>()
 
     private init() {
-        cache.countLimit = 400
+        cache.countLimit = 96
+        cache.totalCostLimit = 6 * 1024 * 1024 // Cap icon cache at 6 MB
     }
 
     public func icon(forPath path: String, isDirectory: Bool = false) -> NSImage {
@@ -541,10 +542,46 @@ public final class NativeIconCache {
         if let cached = cache.object(forKey: key as NSString) {
             return cached
         }
-        let img = NSWorkspace.shared.icon(forFile: path)
-        img.size = NSSize(width: 128, height: 128)
-        cache.setObject(img, forKey: key as NSString)
-        return img
+
+        // Downsample multi-megabyte 1024x1024 NSWorkspace icon into a compact 96x96px (48x48pt @2x) bitmap
+        // and discard the huge original representations so RAM stays ultra-low.
+        let compactImage: NSImage = autoreleasepool {
+            let source = NSWorkspace.shared.icon(forFile: path)
+            let px = 96
+            let pt: CGFloat = 48
+            guard let rep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: px,
+                pixelsHigh: px,
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0,
+                bitsPerPixel: 0
+            ) else {
+                source.size = NSSize(width: pt, height: pt)
+                return source
+            }
+            rep.size = NSSize(width: pt, height: pt)
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+            NSGraphicsContext.current?.imageInterpolation = .medium
+            source.draw(in: NSRect(x: 0, y: 0, width: pt, height: pt), from: .zero, operation: .copy, fraction: 1.0)
+            NSGraphicsContext.restoreGraphicsState()
+
+            let compact = NSImage(size: NSSize(width: pt, height: pt))
+            compact.addRepresentation(rep)
+            return compact
+        }
+
+        cache.setObject(compactImage, forKey: key as NSString, cost: 96 * 96 * 4)
+        return compactImage
+    }
+
+    public func purge() {
+        cache.removeAllObjects()
     }
 }
 
@@ -562,7 +599,6 @@ public struct NativeFileIconView: View {
     public var body: some View {
         Image(nsImage: NativeIconCache.shared.icon(forPath: path, isDirectory: isDirectory))
             .resizable()
-            .interpolation(.high)
             .aspectRatio(contentMode: .fit)
             .frame(width: size, height: size)
     }

@@ -52,9 +52,7 @@ public struct LiveBackgroundView: View {
                 endPoint: .center
             )
         }
-        .drawingGroup()
         .allowsHitTesting(false)
-        .animation(reduceMotion ? nil : .easeInOut(duration: 0.55), value: module)
         .ignoresSafeArea()
     }
 }

@@ -10,7 +10,7 @@ public struct CryoFreezerView: View {
     @State private var autoRefreshEnabled: Bool = true
     @State private var confirmForceQuitItem: CryoProcessItem? = nil
     private let palette = RCleanerTheme.palette(for: .cryoFreezer)
-    private let refreshTimer = Timer.publish(every: 3.5, on: .main, in: .common).autoconnect()
+    private let refreshTimer = Timer.publish(every: 6.0, tolerance: 1.5, on: .main, in: .common).autoconnect()
 
     private enum ViewMode: String, CaseIterable, Identifiable {
         case thermalMatrix = "Cells"
@@ -83,7 +83,9 @@ public struct CryoFreezerView: View {
             appState.refreshCryoProcesses()
         }
         .onReceive(refreshTimer) { _ in
-            guard autoRefreshEnabled, appState.selectedModule == .cryoFreezer else { return }
+            guard autoRefreshEnabled,
+                  appState.selectedModule == .cryoFreezer,
+                  NSApp.isActive else { return }
             appState.refreshCryoProcesses(silent: true)
         }
         .alert(
@@ -926,6 +928,7 @@ private struct CryoProcessInspectorCard: View {
                 .font(.system(size: 11, weight: .bold, design: .monospaced))
                 .foregroundStyle(highlight ?? .white.opacity(0.90))
                 .lineLimit(1)
+                .minimumScaleFactor(0.72)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)

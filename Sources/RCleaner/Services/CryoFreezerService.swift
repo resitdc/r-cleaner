@@ -47,6 +47,8 @@ public final class CryoFreezerService: @unchecked Sendable {
         items.reserveCapacity(min(80, rawRows.count))
 
         for row in rawRows {
+            // Exclude R-Cleaner itself so its own transient scan thread isn't listed as a freeze target
+            guard row.pid != selfPID else { continue }
             currentPIDSet.insert(row.pid)
             let guiInfo = guiAppsByPID[row.pid]
             let isFrozen = row.stat.uppercased().hasPrefix("T") || sessionFrozenPIDs.contains(row.pid)
@@ -137,7 +139,8 @@ public final class CryoFreezerService: @unchecked Sendable {
             return scoreA > scoreB
         }
 
-        return CryoFreezerSnapshot(items: Array(items.prefix(48)), lastUpdated: Date())
+        malloc_zone_pressure_relief(nil, 0)
+        return CryoFreezerSnapshot(items: Array(items.prefix(36)), lastUpdated: Date())
     }
 
     private static func thermalSortRank(_ state: CryoThermalState) -> Int {

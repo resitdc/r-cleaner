@@ -295,21 +295,35 @@ public final class AppState: ObservableObject {
 
     private func startTelemetryTimer() {
         telemetryTimer?.invalidate()
-        telemetryTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 8.0, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                // Skip background polling when R-Cleaner is inactive and hidden
+                let isVisible = NSApp?.isActive == true || (NSApp?.windows.contains(where: \.isVisible) ?? true)
+                guard isVisible else { return }
                 self.telemetryTickCount += 1
                 self.refreshTelemetry(includeHeavy: self.telemetryTickCount % 3 == 0)
             }
         }
+        timer.tolerance = 2.0
+        RunLoop.main.add(timer, forMode: .common)
+        telemetryTimer = timer
     }
 
-    public func refreshTelemetry(includeHeavy: Bool = true) {
+    public func refreshTelemetry(includeHeavy: Bool = true, includeNetworkProcesses: Bool = false) {
         guard !isRefreshingTelemetry else { return }
         isRefreshingTelemetry = true
         let service = telemetryService
         Task.detached(priority: .utility) {
-            let snap = service.captureSnapshot(includeProcessesAndDrives: includeHeavy)
+            let snap = autoreleasepool {
+                service.captureSnapshot(
+                    includeProcessesAndDrives: includeHeavy,
+                    includeNetworkProcesses: includeNetworkProcesses
+                )
+            }
+            if includeHeavy {
+                malloc_zone_pressure_relief(nil, 0)
+            }
             await MainActor.run {
                 var merged = snap
                 if !includeHeavy {
@@ -317,6 +331,8 @@ public final class AppState: ObservableObject {
                     merged.topMemoryConsumers = self.telemetry.topMemoryConsumers
                     merged.topNetworkConsumers = self.telemetry.topNetworkConsumers
                     merged.externalDrives = self.telemetry.externalDrives
+                } else if !includeNetworkProcesses {
+                    merged.topNetworkConsumers = self.telemetry.topNetworkConsumers
                 }
                 merged.network.lastSpeedTestMbps = self.telemetry.network.lastSpeedTestMbps
                 merged.network.isTestingSpeed = self.telemetry.network.isTestingSpeed
