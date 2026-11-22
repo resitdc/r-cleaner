@@ -477,4 +477,39 @@ final class RCleanerTests: XCTestCase {
             XCTAssertNotNil(VoiceAssistantService.bundledClipURL(for: cue), "Missing bundled voice clip: \(cue.rawValue).m4a")
         }
     }
+
+    func testCryoFreezerParsingLeakDetectionAndSafetyGuards() {
+        let samplePs = """
+          1     0 Ss     0.1  24500 12:00:00 /sbin/launchd
+        512     1 S     48.5 1240000 03:20:10 /Users/dev/Library/Android/sdk/emulator/qemu/darwin-aarch64/qemu-system-aarch64
+        890     1 T      0.0 640000 01:15:00 /Applications/Docker.app/Contents/MacOS/Docker
+        """
+        let rows = CryoFreezerService.parsePsTable(samplePs)
+        XCTAssertEqual(rows.count, 3)
+        XCTAssertEqual(rows[1].pid, 512)
+        XCTAssertEqual(rows[1].cpuPercent, 48.5, accuracy: 0.01)
+        XCTAssertEqual(rows[2].stat, "T")
+
+        // Verify thermal classification
+        XCTAssertEqual(
+            CryoFreezerService.classifyThermalState(isFrozen: true, cpuPercent: 0, memoryBytes: 640_000_000, isMemoryGrowing: false),
+            .frozen
+        )
+        XCTAssertEqual(
+            CryoFreezerService.classifyThermalState(isFrozen: false, cpuPercent: 48.5, memoryBytes: 1_240_000_000, isMemoryGrowing: false),
+            .overheating
+        )
+
+        // Verify rolling memory leak / growth detector (>= +12 MB)
+        let growingHistory: [Int64] = [300 * 1_048_576, 310 * 1_048_576, 325 * 1_048_576]
+        let eval = CryoFreezerService.evaluateMemoryGrowth(history: growingHistory, currentBytes: 325 * 1_048_576)
+        XCTAssertTrue(eval.isGrowing)
+        XCTAssertEqual(eval.deltaBytes, 25 * 1_048_576)
+
+        // Verify safety guards never allow freezing Finder, WindowServer, launchd, or R-Cleaner itself
+        XCTAssertTrue(CryoFreezerService.isProtectedProcess(pid: 1, processName: "launchd", executablePath: "/sbin/launchd"))
+        XCTAssertTrue(CryoFreezerService.isProtectedProcess(pid: 450, processName: "Finder", executablePath: "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder", bundleIdentifier: "com.apple.finder"))
+        XCTAssertTrue(CryoFreezerService.isProtectedProcess(pid: getpid(), processName: "R-Cleaner", executablePath: "/Applications/R-Cleaner.app/Contents/MacOS/R-Cleaner"))
+        XCTAssertFalse(CryoFreezerService.isProtectedProcess(pid: 512, processName: "qemu-system-aarch64", executablePath: "/Users/dev/Library/Android/sdk/emulator/qemu-system-aarch64"))
+    }
 }

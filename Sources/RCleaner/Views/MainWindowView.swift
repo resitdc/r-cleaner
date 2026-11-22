@@ -241,6 +241,7 @@ public struct MainWindowView: View {
                 case .spaceLens: SpaceLensView()
                 case .devAISweeper: DevAISweeperView()
                 case .portKiller: PortKillerView()
+                case .cryoFreezer: CryoFreezerView()
                 case .emailCleanup: EmailCleanupView()
                 case .myTools: MyToolsView()
                 case .myActivity: MyActivityDashboardView()

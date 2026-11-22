@@ -13,6 +13,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable, Sendabl
     case spaceLens = "Space Lens"
     case devAISweeper = "Dev & AI Sweeper"
     case portKiller = "Port Killer"
+    case cryoFreezer = "Cryo-Freezer"
     case emailCleanup = "Email Cleanup"
     case myTools = "My Tools"
     case myActivity = "My Activity"
@@ -30,6 +31,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable, Sendabl
         case .spaceLens: return "Visualize what's taking up the most disk space and clean up quickly."
         case .devAISweeper: return "Sweep stale node_modules, Rust/Swift/Gradle builds, Xcode, Docker, and local AI caches."
         case .portKiller: return "Inspect active TCP ports, identify local dev servers & project folders, and kill stuck ports in one click."
+        case .cryoFreezer: return "Cryo-freeze heavy apps to 0% CPU without closing them, and spot live memory leaks."
         case .emailCleanup: return "Clear out inbox clutter and unsubscribe from unwanted newsletters."
         case .myTools: return "Quick tools for focused tasks — clean up, protect, and maintain your Mac."
         case .myActivity: return "Track storage freed, malware scans, and total time saved."
@@ -47,6 +49,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable, Sendabl
         case .spaceLens: return "circle.hexagongrid.fill"
         case .devAISweeper: return "terminal.fill"
         case .portKiller: return "network.badge.shield.half.filled"
+        case .cryoFreezer: return "snowflake"
         case .emailCleanup: return "envelope.badge.fill"
         case .myTools: return "wrench.and.screwdriver.fill"
         case .myActivity: return "chart.bar.xaxis"
@@ -55,7 +58,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable, Sendabl
 
     public var badgeText: String? {
         switch self {
-        case .devAISweeper, .portKiller: return "New"
+        case .devAISweeper, .portKiller, .cryoFreezer: return "New"
         default: return nil
         }
     }
@@ -1031,5 +1034,146 @@ public struct PortKillerSnapshot: Sendable {
 
     public func count(for category: PortServiceCategory) -> Int {
         items.filter { $0.category == category }.count
+    }
+}
+
+// MARK: - Process Pulse & App Cryo-Freezer Models
+
+public enum CryoThermalState: String, CaseIterable, Identifiable, Codable, Sendable {
+    case frozen = "Cryo-Frozen"
+    case overheating = "Hot / Heavy"
+    case warm = "Active Warm"
+    case cool = "Cool & Nominal"
+
+    public var id: String { rawValue }
+
+    public var badgeLabel: String {
+        switch self {
+        case .frozen: return "FROZEN • 0% CPU"
+        case .overheating: return "HOT LOAD"
+        case .warm: return "WARM"
+        case .cool: return "COOL"
+        }
+    }
+
+    public var iconName: String {
+        switch self {
+        case .frozen: return "snowflake"
+        case .overheating: return "flame.fill"
+        case .warm: return "bolt.fill"
+        case .cool: return "leaf.fill"
+        }
+    }
+
+    public var accentHex: String {
+        switch self {
+        case .frozen: return "38BDF8"
+        case .overheating: return "FF5E57"
+        case .warm: return "FFB703"
+        case .cool: return "00F5D4"
+        }
+    }
+}
+
+public struct CryoProcessItem: Identifiable, Hashable, Sendable {
+    public var id: Int32 { pid }
+    public let pid: Int32
+    public let ppid: Int32
+    public let name: String
+    public let bundleName: String?
+    public let bundlePath: String?
+    public let executablePath: String
+    public let stateCode: String
+    public let isFrozen: Bool
+    public let isGUIApp: Bool
+    public let cpuPercent: Double
+    public let memoryBytes: Int64
+    public let memoryHistory: [Int64]
+    public let memoryDeltaBytes: Int64
+    public let isMemoryGrowing: Bool
+    public let uptimeLabel: String
+    public let thermalState: CryoThermalState
+    public let isSystemProtected: Bool
+
+    public var displayTitle: String {
+        if let bundleName, !bundleName.isEmpty {
+            return bundleName
+        }
+        return name
+    }
+
+    public var iconFilePath: String {
+        if let bundlePath, !bundlePath.isEmpty {
+            return bundlePath
+        }
+        return executablePath
+    }
+
+    public init(
+        pid: Int32,
+        ppid: Int32,
+        name: String,
+        bundleName: String?,
+        bundlePath: String?,
+        executablePath: String,
+        stateCode: String,
+        isFrozen: Bool,
+        isGUIApp: Bool,
+        cpuPercent: Double,
+        memoryBytes: Int64,
+        memoryHistory: [Int64],
+        memoryDeltaBytes: Int64,
+        isMemoryGrowing: Bool,
+        uptimeLabel: String,
+        thermalState: CryoThermalState,
+        isSystemProtected: Bool
+    ) {
+        self.pid = pid
+        self.ppid = ppid
+        self.name = name
+        self.bundleName = bundleName
+        self.bundlePath = bundlePath
+        self.executablePath = executablePath
+        self.stateCode = stateCode
+        self.isFrozen = isFrozen
+        self.isGUIApp = isGUIApp
+        self.cpuPercent = cpuPercent
+        self.memoryBytes = memoryBytes
+        self.memoryHistory = memoryHistory
+        self.memoryDeltaBytes = memoryDeltaBytes
+        self.isMemoryGrowing = isMemoryGrowing
+        self.uptimeLabel = uptimeLabel
+        self.thermalState = thermalState
+        self.isSystemProtected = isSystemProtected
+    }
+}
+
+public struct CryoFreezerSnapshot: Sendable {
+    public var items: [CryoProcessItem] = []
+    public var lastUpdated: Date = Date()
+
+    public init(items: [CryoProcessItem] = [], lastUpdated: Date = Date()) {
+        self.items = items
+        self.lastUpdated = lastUpdated
+    }
+
+    public var frozenCount: Int {
+        items.filter(\.isFrozen).count
+    }
+
+    public var hotCount: Int {
+        items.filter { $0.thermalState == .overheating || $0.thermalState == .warm }.count
+    }
+
+    public var memoryGrowingCount: Int {
+        items.filter(\.isMemoryGrowing).count
+    }
+
+    public var totalMemoryBytes: Int64 {
+        items.reduce(0) { $0 + $1.memoryBytes }
+    }
+
+    public var frozenMemoryBytes: Int64 {
+        items.filter(\.isFrozen).reduce(0) { $0 + $1.memoryBytes }
     }
 }

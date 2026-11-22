@@ -95,6 +95,15 @@ public enum RCleanerTheme {
                 backgroundMid: Color(hex: "112548"),
                 backgroundBottom: Color(hex: "060E1B")
             )
+        case .cryoFreezer:
+            return ModulePalette(
+                primary: Color(hex: "38BDF8"),
+                secondary: Color(hex: "00F5D4"),
+                accent: Color(hex: "A5F3FC"),
+                backgroundTop: Color(hex: "07182B"),
+                backgroundMid: Color(hex: "0D2847"),
+                backgroundBottom: Color(hex: "040E1A")
+            )
         case .emailCleanup:
             return ModulePalette(
                 primary: Color(hex: "F472B6"),

@@ -14,6 +14,7 @@ public final class AppState: ObservableObject {
     public let spaceLensService = SpaceLensService()
     public let devAISweeperService = DevAISweeperService()
     public let portKillerService = PortKillerService()
+    public let cryoFreezerService = CryoFreezerService()
     public let cloudEmailService = CloudAndEmailService()
     public let assistantService = AssistantService()
     public let voiceService = VoiceAssistantService()
@@ -124,6 +125,10 @@ public final class AppState: ObservableObject {
     @Published public var portKillerSnapshot = PortKillerSnapshot()
     @Published public var isScanningPorts: Bool = false
 
+    // Process Pulse & App Cryo-Freezer State
+    @Published public var cryoSnapshot = CryoFreezerSnapshot()
+    @Published public var isScanningCryo: Bool = false
+
     // Email Cleanup State
     @Published public var emailStage: ModuleStage = .intro
     @Published public var emailMessages: [EmailMessageItem] = []
@@ -153,6 +158,16 @@ public final class AppState: ObservableObject {
         resetSmartCarePillars()
         startTelemetryTimer()
         refreshTelemetry(includeHeavy: true)
+
+        // Safety guarantee: automatically thaw any cryo-frozen apps if R-Cleaner terminates
+        let cryoSvc = cryoFreezerService
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.willTerminateNotification,
+            object: nil,
+            queue: .main
+        ) { _ in
+            cryoSvc.unfreezeAll()
+        }
 
         // Gentle background check for newer GitHub Releases after launch settles
         if loadedSettings.checkUpdatesAutomatically {
@@ -1309,6 +1324,72 @@ public final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Process Pulse & App Cryo-Freezer Actions
+
+    public func refreshCryoProcesses(silent: Bool = false) {
+        guard !isScanningCryo else { return }
+        isScanningCryo = true
+        let service = cryoFreezerService
+        Task.detached(priority: .userInitiated) {
+            let snap = service.scanProcesses()
+            await MainActor.run {
+                self.cryoSnapshot = snap
+                self.isScanningCryo = false
+            }
+        }
+    }
+
+    public func toggleCryoFreeze(_ item: CryoProcessItem) {
+        let service = cryoFreezerService
+        Task.detached(priority: .userInitiated) {
+            let res = item.isFrozen ? service.unfreezeProcess(item) : service.freezeProcess(item)
+            let updated = service.scanProcesses()
+            await MainActor.run {
+                self.cryoSnapshot = updated
+                self.showBanner(res.message)
+                if res.success {
+                    self.stats.totalMaintenanceTasksRun += 1
+                    self.stats.totalTimeSavedMinutes += 2
+                }
+            }
+        }
+    }
+
+    public func unfreezeAllCryoProcesses() {
+        let service = cryoFreezerService
+        let currentSnap = cryoSnapshot
+        Task.detached(priority: .userInitiated) {
+            let count = service.unfreezeAll(in: currentSnap)
+            let updated = service.scanProcesses()
+            await MainActor.run {
+                self.cryoSnapshot = updated
+                self.showBanner("Unfroze \(count) process(es) — normal execution resumed")
+            }
+        }
+    }
+
+    public func terminateCryoProcess(_ item: CryoProcessItem, force: Bool) {
+        guard !item.isSystemProtected else { return }
+        let cryoSvc = cryoFreezerService
+        let telSvc = telemetryService
+        Task.detached(priority: .userInitiated) {
+            if item.isFrozen {
+                _ = cryoSvc.unfreezeProcess(item)
+            }
+            let ok = telSvc.terminateProcess(pid: item.pid, force: force)
+            let updated = cryoSvc.scanProcesses()
+            await MainActor.run {
+                self.cryoSnapshot = updated
+                self.showBanner(ok
+                    ? "\(force ? "Force-quit" : "Quit") \(item.displayTitle) (PID \(String(item.pid)))"
+                    : "Could not terminate \(item.displayTitle) (PID \(String(item.pid)))")
+                if ok {
+                    self.stats.totalMaintenanceTasksRun += 1
+                }
+            }
+        }
+    }
+
     public func startEmailScan() {
         activeTask?.cancel()
         emailStage = .scanning
@@ -1349,6 +1430,7 @@ public final class AppState: ObservableObject {
         case "spaceLens": startSpaceLensScan()
         case "devAISweeper": startDevAISweeperScan()
         case "portKiller": refreshListeningPorts()
+        case "cryoFreezer": refreshCryoProcesses()
         case "emailCleanup": startEmailScan()
         default: break
         }
