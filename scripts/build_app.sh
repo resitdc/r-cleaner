@@ -17,11 +17,14 @@ DIST_DIR="$ROOT_DIR/dist"
 APP_DIR="$DIST_DIR/${APP_NAME}.app"
 
 BUILD_ARGS=(-c "$CONFIG")
+if [[ "$CONFIG" == "release" ]]; then
+    BUILD_ARGS+=(-Xswiftc -Osize -Xswiftc -gnone -Xlinker -dead_strip)
+fi
 if [[ "$UNIVERSAL" == "1" ]]; then
-    echo "==> Building ${APP_NAME} ($CONFIG, universal arm64 + x86_64)..."
+    echo "==> Building ${APP_NAME} ($CONFIG, universal arm64 + x86_64, size-optimized)..."
     BUILD_ARGS+=(--arch arm64 --arch x86_64)
 else
-    echo "==> Building ${APP_NAME} ($CONFIG, native $(uname -m))..."
+    echo "==> Building ${APP_NAME} ($CONFIG, native $(uname -m), size-optimized)..."
 fi
 
 swift build "${BUILD_ARGS[@]}"
@@ -40,15 +43,14 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/${APP_NAME}"
 chmod +x "$APP_DIR/Contents/MacOS/${APP_NAME}"
 
+if [[ "$CONFIG" == "release" ]]; then
+    echo "==> Stripping debug & local symbol tables from executable..."
+    strip -r -u "$APP_DIR/Contents/MacOS/${APP_NAME}"
+fi
+
 # Bundle built-in Clear Neural Voice Pack directly into Resources (zero user download required)
 if [[ -d "$ROOT_DIR/Sources/RCleaner/Resources/VoicePack" ]]; then
     cp -R "$ROOT_DIR/Sources/RCleaner/Resources/VoicePack" "$APP_DIR/Contents/Resources/VoicePack"
-fi
-
-# Copy SwiftPM resource bundle if generated alongside the binary
-RESOURCE_BUNDLE="${BIN_DIR}/RCleaner_RCleaner.bundle"
-if [[ -d "$RESOURCE_BUNDLE" ]]; then
-    cp -R "$RESOURCE_BUNDLE" "$APP_DIR/Contents/Resources/"
 fi
 
 # Generate native AppIcon.icns

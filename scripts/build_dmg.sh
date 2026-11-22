@@ -39,13 +39,20 @@ cp -R "$APP_DIR" "$STAGING_DIR/${APP_NAME}.app"
 ln -s /Applications "$STAGING_DIR/Applications"
 
 rm -f "$DMG_PATH"
-hdiutil create \
+if ! hdiutil create \
     -volname "${APP_NAME}" \
     -srcfolder "$STAGING_DIR" \
     -ov \
-    -format UDZO \
-    -imagekey zlib-level=9 \
-    "$DMG_PATH"
+    -format ULMO \
+    "$DMG_PATH"; then
+    hdiutil create \
+        -volname "${APP_NAME}" \
+        -srcfolder "$STAGING_DIR" \
+        -ov \
+        -format UDZO \
+        -imagekey zlib-level=9 \
+        "$DMG_PATH"
+fi
 
 if [[ -n "$CODESIGN_IDENTITY" ]]; then
     echo "==> Code signing DMG with Developer ID..."
@@ -54,7 +61,7 @@ fi
 
 echo "==> Creating notarization-friendly ZIP archive (${ZIP_NAME})..."
 rm -f "$ZIP_PATH"
-ditto -c -k --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_PATH"
+ditto -c -k --zlibCompressionLevel 9 --sequesterRsrc --keepParent "$APP_DIR" "$ZIP_PATH"
 
 echo "==> Generating SHA256SUMS.txt..."
 (
