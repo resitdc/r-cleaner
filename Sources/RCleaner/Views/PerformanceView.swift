@@ -43,6 +43,16 @@ public struct PerformanceView: View {
 
         case .resultsOverview, .dataManager:
             performanceManagerView
+                .onAppear {
+                    if let focused = appState.performanceFocusedTab {
+                        switch focused {
+                        case "loginItems": selectedTab = .loginItems
+                        case "backgroundItems": selectedTab = .backgroundItems
+                        default: selectedTab = .maintenance
+                        }
+                        appState.performanceFocusedTab = nil
+                    }
+                }
 
         case .cleaning:
             ScanningProgressView(
@@ -287,6 +297,12 @@ public struct PerformanceView: View {
                     Task {
                         appState.performanceStage = .cleaning
                         let res = await appState.performanceService.removeStartupItems(items)
+                        let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+                        if isLogin {
+                            appState.performanceResult.loginItems.removeAll { cleanedPaths.contains($0.path) }
+                        } else {
+                            appState.performanceResult.backgroundItems.removeAll { cleanedPaths.contains($0.path) }
+                        }
                         appState.performanceSummary = res
                         appState.performanceStage = .complete
                     }

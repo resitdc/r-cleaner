@@ -10,8 +10,8 @@ public struct MyToolsView: View {
     private var allTools: [QuickToolItem] {
         [
             QuickToolItem(id: "cryoFreezer", title: "App Cryo-Freezer & Pulse", description: "Freeze heavy apps to 0% CPU without closing them (SIGSTOP/SIGCONT) and spot live RAM leaks.", iconName: "snowflake", keywords: ["freeze", "cryo", "pause", "suspend", "cpu", "ram", "leak", "pulse", "thaw"], badge: "New", targetModule: .cryoFreezer, focusedFlowID: "cryoFreezer", accentHex: "38BDF8"),
-            QuickToolItem(id: "portKiller", title: "Port & Server Killer", description: "Inspect listening TCP ports (:3000, :5173, :8080, :5432), identify project folders, and kill stuck servers in 1 click.", iconName: "network.badge.shield.half.filled", keywords: ["port", "server", "localhost", "3000", "5173", "8080", "5432", "node", "vite", "kill", "lsof"], badge: "New", targetModule: .portKiller, focusedFlowID: "portKiller", accentHex: "38BDF8"),
-            QuickToolItem(id: "devAISweeper", title: "Dev & AI Sweeper", description: "Sweep stale node_modules, Rust target, Swift .build, Xcode, Docker, and local AI caches.", iconName: "terminal.fill", keywords: ["dev", "developer", "node_modules", "rust", "target", "xcode", "docker", "gradle", "ai", "ollama", "python", "venv"], badge: "New", targetModule: .devAISweeper, focusedFlowID: "devAISweeper", accentHex: "00D2A0"),
+            QuickToolItem(id: "portKiller", title: "Port & Server Killer", description: "Inspect listening TCP ports (:3000, :5173, :8080, :5432), identify project folders, and kill stuck servers in 1 click.", iconName: "network.badge.shield.half.filled", keywords: ["port", "server", "localhost", "3000", "5173", "8080", "5432", "node", "vite", "kill", "lsof"], badge: "New", targetModule: .portKiller, focusedFlowID: "portKiller", accentHex: "F59E0B"),
+            QuickToolItem(id: "devAISweeper", title: "Dev & AI Sweeper", description: "Sweep stale node_modules, Rust target, Swift .build, Xcode, Docker, and local AI caches.", iconName: "terminal.fill", keywords: ["dev", "developer", "node_modules", "rust", "target", "xcode", "docker", "gradle", "ai", "ollama", "python", "venv"], badge: "New", targetModule: .devAISweeper, focusedFlowID: "devAISweeper", accentHex: "10B981"),
             QuickToolItem(id: "systemJunk", title: "System Junk", description: "Remove redundant caches, logs, and Xcode derived data.", iconName: "sparkles.rectangle.stack.fill", keywords: ["cache", "logs", "junk", "xcode"], badge: nil, targetModule: .cleanup, focusedFlowID: "systemJunk", accentHex: "F44B98"),
             QuickToolItem(id: "aiClutter", title: "AI Clutter", description: "Clean Claude, Codex, Gemini, Cursor caches & local Ollama/LM Studio models.", iconName: "wand.and.rays", keywords: ["ai", "ollama", "lm studio", "claude", "cursor", "gemini"], badge: "New", targetModule: .cleanup, focusedFlowID: "aiClutter", accentHex: "FF7A59"),
             QuickToolItem(id: "mailAttachments", title: "Mail Attachments", description: "Remove locally stored email attachment copies.", iconName: "envelope.open.fill", keywords: ["mail", "attachments"], badge: nil, targetModule: .cleanup, focusedFlowID: "mailAttachments", accentHex: "FFB56B"),
@@ -31,8 +31,8 @@ public struct MyToolsView: View {
             QuickToolItem(id: "largeAndOld", title: "Large & Old Files", description: "Locate huge forgotten files eating disk space.", iconName: "externaldrive.fill.badge.timemachine", keywords: ["large", "old", "big", "huge"], badge: nil, targetModule: .myClutter, focusedFlowID: "largeAndOld", accentHex: "C77DFF"),
             QuickToolItem(id: "downloads", title: "Downloads", description: "Tidy up one-time downloaded files and installers.", iconName: "arrow.down.circle.fill", keywords: ["downloads", "dmg", "installers"], badge: nil, targetModule: .myClutter, focusedFlowID: "downloads", accentHex: "9B5DE5"),
             QuickToolItem(id: "spaceLens", title: "Space Lens", description: "Interactive proportional bubble map of disk usage.", iconName: "circle.hexagongrid.fill", keywords: ["space lens", "map", "bubbles", "storage"], badge: nil, targetModule: .spaceLens, focusedFlowID: "spaceLens", accentHex: "00BBF9"),
-            QuickToolItem(id: "emailCleanup", title: "Email Cleanup", description: "Declutter newsletters, spam, and large inbox messages.", iconName: "envelope.badge.fill", keywords: ["email", "mail", "newsletters", "spam"], badge: "New", targetModule: .emailCleanup, focusedFlowID: "emailCleanup", accentHex: "F472B6"),
-            QuickToolItem(id: "screenCleaning", title: "Screen Cleaning Mode", description: "Locks keyboard & trackpad with a clean dark screen overlay so you can wipe your display.", iconName: "display", keywords: ["screen", "wipe", "keyboard lock", "clean display"], badge: "New", targetModule: .myTools, focusedFlowID: "screenCleaning", accentHex: "34D399")
+            QuickToolItem(id: "emailCleanup", title: "Email Cleanup", description: "Declutter newsletters, spam, and large inbox messages.", iconName: "envelope.badge.fill", keywords: ["email", "mail", "newsletters", "spam"], badge: "New", targetModule: .emailCleanup, focusedFlowID: "emailCleanup", accentHex: "EC4899"),
+            QuickToolItem(id: "screenCleaning", title: "Screen Cleaning Mode", description: "Locks keyboard & trackpad with a clean dark screen overlay so you can wipe your display.", iconName: "display", keywords: ["screen", "wipe", "keyboard lock", "clean display"], badge: "New", targetModule: .myTools, focusedFlowID: "screenCleaning", accentHex: "8B5CF6")
         ]
     }
 
@@ -158,14 +158,16 @@ public struct MyToolsView: View {
                         Text(tool.title)
                             .font(.system(size: 14, weight: .bold))
                             .foregroundStyle(.white)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.88)
 
                         Text(tool.description)
                             .font(.system(size: 11.5))
                             .foregroundStyle(.white.opacity(0.68))
                             .lineLimit(2)
-                            .frame(minHeight: 30, alignment: .topLeading)
+                            .frame(minHeight: 32, maxHeight: 32, alignment: .topLeading)
 
-                        Button(tool.focusedFlowID == "screenCleaning" ? "Open" : "Scan") {
+                        Button(tool.focusedFlowID == "screenCleaning" || tool.focusedFlowID == "portKiller" || tool.focusedFlowID == "cryoFreezer" ? "Open" : "Scan") {
                             appState.launchQuickTool(tool)
                         }
                         .font(.system(size: 12, weight: .semibold))

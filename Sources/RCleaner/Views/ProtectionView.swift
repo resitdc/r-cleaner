@@ -52,6 +52,16 @@ public struct ProtectionView: View {
 
         case .resultsOverview, .dataManager:
             protectionManagerView
+                .onAppear {
+                    if let focused = appState.protectionFocusedTab {
+                        switch focused {
+                        case "privacyItems": selectedTab = .privacy
+                        case "applicationPermissions": selectedTab = .permissions
+                        default: selectedTab = .malware
+                        }
+                        appState.protectionFocusedTab = nil
+                    }
+                }
 
         case .cleaning:
             ScanningProgressView(
@@ -177,13 +187,17 @@ public struct ProtectionView: View {
                     .padding(.horizontal, 24)
                 }
 
-                UbiquitousButton(title: "Remove", subtitle: "Threats", palette: palette) {
+                let selectedThreatsCount = appState.protectionResult.threats.filter(\.isSelected).count
+                UbiquitousButton(title: "Remove", subtitle: "Threats", palette: palette, isDisabled: selectedThreatsCount == 0) {
                     Task {
                         appState.protectionStage = .cleaning
                         let res = await appState.protectionService.removeSelectedThreats(appState.protectionResult.threats)
+                        let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+                        appState.protectionResult.threats.removeAll { cleanedPaths.contains($0.path) }
                         appState.stats.totalThreatsRemoved += res.itemsProcessed
                         appState.protectionSummary = res
                         appState.protectionStage = .complete
+                        appState.refreshHealthScore()
                     }
                 }
                 .padding(.bottom, 16)
@@ -266,6 +280,16 @@ public struct ProtectionView: View {
         Task {
             appState.protectionStage = .cleaning
             let res = await appState.protectionService.removeSelectedPrivacyItems(appState.protectionResult.privacyCategories, quitRunningBrowsers: quitBrowsers)
+            let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+            for cIdx in appState.protectionResult.privacyCategories.indices {
+                for gIdx in appState.protectionResult.privacyCategories[cIdx].groups.indices {
+                    for iIdx in appState.protectionResult.privacyCategories[cIdx].groups[gIdx].items.indices {
+                        if cleanedPaths.contains(appState.protectionResult.privacyCategories[cIdx].groups[gIdx].items[iIdx].path) {
+                            appState.protectionResult.privacyCategories[cIdx].groups[gIdx].items[iIdx].isSelected = false
+                        }
+                    }
+                }
+            }
             appState.protectionSummary = res
             appState.protectionStage = .complete
         }

@@ -84,6 +84,17 @@ public struct MyClutterView: View {
 
         case .resultsOverview, .dataManager:
             clutterManagerView
+                .onAppear {
+                    if let focused = appState.clutterFocusedTab {
+                        switch focused {
+                        case "similarImages": selectedTab = .similarImages
+                        case "largeAndOld": selectedTab = .largeAndOld
+                        case "downloads": selectedTab = .downloads
+                        default: selectedTab = .duplicates
+                        }
+                        appState.clutterFocusedTab = nil
+                    }
+                }
 
         case .cleaning:
             ScanningProgressView(
@@ -420,27 +431,38 @@ public struct MyClutterView: View {
                 .padding(.horizontal, 24)
             }
 
-            ScrollView {
-                LazyVStack(spacing: 7) {
-                    ForEach(filteredIndices, id: \.self) { idx in
-                        let item = appState.clutterResult.largeAndOldFiles[idx]
-                        HStack(spacing: 10) {
-                            Toggle("", isOn: $appState.clutterResult.largeAndOldFiles[idx].isSelected).toggleStyle(.checkbox).labelsHidden()
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                                Text("\(item.groupTitle) • \(item.path)").font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.5)).lineLimit(1).truncationMode(.middle)
+            if filteredIndices.isEmpty {
+                Spacer()
+                Image(systemName: "externaldrive.badge.checkmark")
+                    .font(.system(size: 52))
+                    .foregroundStyle(Color(hex: "2ED573"))
+                Text(appState.clutterResult.largeAndOldFiles.isEmpty ? "No large or old files found" : "No files match your filter")
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 7) {
+                        ForEach(filteredIndices, id: \.self) { idx in
+                            let item = appState.clutterResult.largeAndOldFiles[idx]
+                            HStack(spacing: 10) {
+                                Toggle("", isOn: $appState.clutterResult.largeAndOldFiles[idx].isSelected).toggleStyle(.checkbox).labelsHidden()
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                                    Text("\(item.groupTitle) • \(item.path)").font(.system(size: 10, design: .monospaced)).foregroundStyle(.white.opacity(0.5)).lineLimit(1).truncationMode(.middle)
+                                }
+                                Spacer()
+                                Text(ByteFormat.string(item.sizeBytes)).font(.system(size: 12, weight: .bold).monospacedDigit()).foregroundStyle(palette.accent)
+                                Button { FileSystemHelpers.revealInFinder(path: item.path) } label: {
+                                    Image(systemName: "magnifyingglass.circle").foregroundStyle(.white.opacity(0.65))
+                                }.buttonStyle(.plain)
                             }
-                            Spacer()
-                            Text(ByteFormat.string(item.sizeBytes)).font(.system(size: 12, weight: .bold).monospacedDigit()).foregroundStyle(palette.accent)
-                            Button { FileSystemHelpers.revealInFinder(path: item.path) } label: {
-                                Image(systemName: "magnifyingglass.circle").foregroundStyle(.white.opacity(0.65))
-                            }.buttonStyle(.plain)
+                            .padding(11)
+                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.06)))
                         }
-                        .padding(11)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.06)))
                     }
+                    .padding(.horizontal, 24)
                 }
-                .padding(.horizontal, 24)
             }
 
             UbiquitousButton(title: "Remove", subtitle: ByteFormat.string(selectedBytes), palette: palette, isDisabled: selected.isEmpty) {
@@ -480,27 +502,38 @@ public struct MyClutterView: View {
                 .padding(.horizontal, 24)
             }
 
-            ScrollView {
-                LazyVStack(spacing: 7) {
-                    ForEach(filteredIndices, id: \.self) { idx in
-                        let item = appState.clutterResult.downloads[idx]
-                        HStack(spacing: 10) {
-                            Toggle("", isOn: $appState.clutterResult.downloads[idx].isSelected).toggleStyle(.checkbox).labelsHidden()
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                                Text(item.subtitle).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
+            if filteredIndices.isEmpty {
+                Spacer()
+                Image(systemName: "arrow.down.circle.fill")
+                    .font(.system(size: 52))
+                    .foregroundStyle(Color(hex: "2ED573"))
+                Text(appState.clutterResult.downloads.isEmpty ? "Your Downloads folder is clean" : "No downloads match this source")
+                    .font(.title3.bold())
+                    .foregroundStyle(.white)
+                Spacer()
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 7) {
+                        ForEach(filteredIndices, id: \.self) { idx in
+                            let item = appState.clutterResult.downloads[idx]
+                            HStack(spacing: 10) {
+                                Toggle("", isOn: $appState.clutterResult.downloads[idx].isSelected).toggleStyle(.checkbox).labelsHidden()
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.name).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                                    Text(item.subtitle).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
+                                }
+                                Spacer()
+                                Text(ByteFormat.string(item.sizeBytes)).font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(.white)
+                                Button { FileSystemHelpers.revealInFinder(path: item.path) } label: {
+                                    Image(systemName: "magnifyingglass.circle").foregroundStyle(.white.opacity(0.65))
+                                }.buttonStyle(.plain)
                             }
-                            Spacer()
-                            Text(ByteFormat.string(item.sizeBytes)).font(.system(size: 12, weight: .semibold).monospacedDigit()).foregroundStyle(.white)
-                            Button { FileSystemHelpers.revealInFinder(path: item.path) } label: {
-                                Image(systemName: "magnifyingglass.circle").foregroundStyle(.white.opacity(0.65))
-                            }.buttonStyle(.plain)
+                            .padding(11)
+                            .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.06)))
                         }
-                        .padding(11)
-                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.white.opacity(0.06)))
                     }
+                    .padding(.horizontal, 24)
                 }
-                .padding(.horizontal, 24)
             }
 
             UbiquitousButton(title: "Remove", subtitle: ByteFormat.string(selectedBytes), palette: palette, isDisabled: selected.isEmpty) {
@@ -514,6 +547,8 @@ public struct MyClutterView: View {
         Task {
             appState.clutterStage = .cleaning
             let res = await appState.clutterService.removeFiles(paths: list)
+            let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+            appState.pruneCleanedClutter(cleanedPaths)
             appState.stats.totalPersonalFilesCleanedBytes += res.bytesFreed
             appState.stats.monthlyCleanedBytes += res.bytesFreed
             if isDuplicates { appState.stats.totalDuplicatesRemoved += res.itemsProcessed }

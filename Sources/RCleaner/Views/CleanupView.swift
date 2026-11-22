@@ -48,8 +48,10 @@ public struct CleanupView: View {
         case .dataManager(let initialCat):
             cleanupDataManagerView
                 .onAppear {
-                    if selectedCategoryID == nil {
-                        selectedCategoryID = initialCat ?? appState.cleanupCategories.first?.id
+                    if let initialCat, appState.cleanupCategories.contains(where: { $0.id == initialCat }) {
+                        selectedCategoryID = initialCat
+                    } else if selectedCategoryID == nil || !appState.cleanupCategories.contains(where: { $0.id == selectedCategoryID }) {
+                        selectedCategoryID = appState.cleanupCategories.first?.id
                     }
                     syncSelectedGroup()
                 }
@@ -353,10 +355,24 @@ public struct CleanupView: View {
                         }
                         .padding(.horizontal, 6)
 
-                        ScrollView {
-                            LazyVStack(spacing: 6) {
-                                ForEach(filteredItemIndices(catIdx: catIdx, gIdx: gIdx), id: \.self) { iIdx in
-                                    let item = appState.cleanupCategories[catIdx].groups[gIdx].items[iIdx]
+                        let matchingIndices = filteredItemIndices(catIdx: catIdx, gIdx: gIdx)
+                        if matchingIndices.isEmpty {
+                            VStack(spacing: 8) {
+                                Spacer()
+                                Image(systemName: "magnifyingglass")
+                                    .font(.system(size: 32))
+                                    .foregroundStyle(.white.opacity(0.4))
+                                Text("No items match your search")
+                                    .font(.system(size: 14, weight: .semibold))
+                                    .foregroundStyle(.white.opacity(0.8))
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            ScrollView {
+                                LazyVStack(spacing: 6) {
+                                    ForEach(matchingIndices, id: \.self) { iIdx in
+                                        let item = appState.cleanupCategories[catIdx].groups[gIdx].items[iIdx]
                                     HStack(spacing: 10) {
                                         Toggle("", isOn: $appState.cleanupCategories[catIdx].groups[gIdx].items[iIdx].isSelected)
                                             .toggleStyle(.checkbox)
@@ -412,6 +428,7 @@ public struct CleanupView: View {
                                     }
                                 }
                             }
+                        }
                         }
                     } else {
                         Spacer()

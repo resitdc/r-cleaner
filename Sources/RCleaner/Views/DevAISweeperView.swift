@@ -485,6 +485,9 @@ public struct DevAISweeperView: View {
                         .font(.callout.monospacedDigit())
                     Button("Deselect") {
                         toggleItem(item.id)
+                        if appState.devAISweeperResult.items.filter(\.isSelected).isEmpty {
+                            showReviewSheet = false
+                        }
                     }
                     .controlSize(.small)
                 }
@@ -497,6 +500,7 @@ public struct DevAISweeperView: View {
                     appState.cleanSelectedDevAIItems(moveToTrash: moveToTrash)
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(selected.isEmpty)
             }
             .padding()
         }

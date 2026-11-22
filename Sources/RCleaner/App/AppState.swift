@@ -83,6 +83,7 @@ public final class AppState: ObservableObject {
     @Published public var protectionStatusText: String = ""
     @Published public var protectionProgress: Double = 0
     @Published public var protectionSummary: CleanupSummary? = nil
+    @Published public var protectionFocusedTab: String? = nil
 
     // Performance State
     @Published public var performanceStage: ModuleStage = .intro
@@ -90,6 +91,7 @@ public final class AppState: ObservableObject {
     @Published public var performanceStatusText: String = ""
     @Published public var performanceProgress: Double = 0
     @Published public var performanceSummary: CleanupSummary? = nil
+    @Published public var performanceFocusedTab: String? = nil
 
     // Applications State
     @Published public var applicationsStage: ModuleStage = .intro
@@ -97,6 +99,7 @@ public final class AppState: ObservableObject {
     @Published public var applicationsStatusText: String = ""
     @Published public var applicationsProgress: Double = 0
     @Published public var applicationsSummary: CleanupSummary? = nil
+    @Published public var applicationsFocusedTab: String? = nil
 
     // My Clutter State
     @Published public var clutterStage: ModuleStage = .intro
@@ -105,6 +108,7 @@ public final class AppState: ObservableObject {
     @Published public var clutterProgress: Double = 0
     @Published public var clutterSummary: CleanupSummary? = nil
     @Published public var clutterCustomFolder: URL? = nil
+    @Published public var clutterFocusedTab: String? = nil
 
     // Space Lens State
     @Published public var spaceLensStage: ModuleStage = .intro
@@ -632,6 +636,11 @@ public final class AppState: ObservableObject {
         case .openModule(let module):
             dismissClearCommandDeck()
             selectedModule = module
+            if module == .portKiller {
+                refreshListeningPorts()
+            } else if module == .cryoFreezer {
+                refreshCryoProcesses()
+            }
             showBanner("Opened \(module.rawValue)")
 
         case .stopScan:
@@ -918,8 +927,10 @@ public final class AppState: ObservableObject {
             if settings.smartCareCleanupEnabled {
                 updatePillar(.cleanup, status: .running, metric: "Cleaning...", subtitle: "Removing junk...")
                 let res = await cleanupService.cleanSelected(categories: cleanupCategories) { msg, pct in
-                    Task { @MainActor in self.smartCareStatusText = msg; self.smartCareProgress = 0.1 + pct * 0.35 }
+                    Task { @MainActor in self.smartCareStatusText = msg; self.smartCareProgress = 0.1 + pct * 0.30 }
                 }
+                let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+                pruneCleanedCategories(cleanedPaths)
                 totalFreed += res.bytesFreed
                 totalProcessed += res.itemsProcessed
                 totalFailed += res.itemsFailed
@@ -931,18 +942,22 @@ public final class AppState: ObservableObject {
             if settings.smartCareProtectionEnabled && !protectionResult.threats.isEmpty {
                 updatePillar(.protection, status: .running, metric: "Removing...", subtitle: "Removing threats...")
                 let res = await protectionService.removeSelectedThreats(protectionResult.threats)
+                let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+                protectionResult.threats.removeAll { cleanedPaths.contains($0.path) }
                 totalFreed += res.bytesFreed
                 totalProcessed += res.itemsProcessed
                 totalFailed += res.itemsFailed
                 allLogs.append(contentsOf: res.logEntries)
                 stats.totalThreatsRemoved += res.itemsProcessed
                 updatePillar(.protection, status: .completed, metric: "\(res.itemsProcessed)", subtitle: "Threats removed")
+            } else if settings.smartCareProtectionEnabled {
+                updatePillar(.protection, status: .completed, metric: "Safe", subtitle: "No threats found")
             }
 
             if settings.smartCarePerformanceEnabled {
                 updatePillar(.performance, status: .running, metric: "Running...", subtitle: "Optimizing Mac...")
                 let res = await performanceService.runMaintenanceTasks(performanceResult.maintenanceTasks) { msg, pct in
-                    Task { @MainActor in self.smartCareStatusText = msg; self.smartCareProgress = 0.55 + pct * 0.25 }
+                    Task { @MainActor in self.smartCareStatusText = msg; self.smartCareProgress = 0.45 + pct * 0.20 }
                 }
                 totalProcessed += res.itemsProcessed
                 totalFailed += res.itemsFailed
@@ -951,11 +966,34 @@ public final class AppState: ObservableObject {
                 updatePillar(.performance, status: .completed, metric: "\(res.itemsProcessed) Done", subtitle: "Tasks complete")
             }
 
+            if settings.smartCareApplicationsEnabled {
+                let appItemsToClean = (applicationsResult.leftovers + applicationsResult.installers)
+                    .filter(\.isSelected)
+                    .map { ($0.name, $0.path, $0.sizeBytes) }
+                if !appItemsToClean.isEmpty {
+                    updatePillar(.applications, status: .running, metric: "Cleaning...", subtitle: "Removing leftovers & installers...")
+                    let res = await clutterService.removeFiles(paths: appItemsToClean)
+                    let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+                    applicationsResult.leftovers.removeAll { cleanedPaths.contains($0.path) }
+                    applicationsResult.installers.removeAll { cleanedPaths.contains($0.path) }
+                    totalFreed += res.bytesFreed
+                    totalProcessed += res.itemsProcessed
+                    totalFailed += res.itemsFailed
+                    allLogs.append(contentsOf: res.logEntries)
+                    stats.totalApplicationsCleanedBytes += res.bytesFreed
+                    updatePillar(.applications, status: .completed, metric: ByteFormat.string(res.bytesFreed), subtitle: "Cleaned")
+                } else {
+                    updatePillar(.applications, status: .completed, metric: "Clean", subtitle: "Applications in shape")
+                }
+            }
+
             if settings.smartCareMyClutterEnabled {
                 let dupesToRemove = clutterResult.duplicateGroups.flatMap(\.copies).filter(\.isSelected).map { ($0.name, $0.path, $0.sizeBytes) }
                 if !dupesToRemove.isEmpty {
                     updatePillar(.myClutter, status: .running, metric: "Decluttering...", subtitle: "Removing duplicates...")
                     let res = await clutterService.removeFiles(paths: dupesToRemove)
+                    let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+                    pruneCleanedClutter(cleanedPaths)
                     totalFreed += res.bytesFreed
                     totalProcessed += res.itemsProcessed
                     totalFailed += res.itemsFailed
@@ -963,6 +1001,8 @@ public final class AppState: ObservableObject {
                     stats.totalPersonalFilesCleanedBytes += res.bytesFreed
                     stats.totalDuplicatesRemoved += res.itemsProcessed
                     updatePillar(.myClutter, status: .completed, metric: ByteFormat.string(res.bytesFreed), subtitle: "Removed")
+                } else {
+                    updatePillar(.myClutter, status: .completed, metric: "Tidy", subtitle: "No duplicates")
                 }
             }
 
@@ -1044,6 +1084,8 @@ public final class AppState: ObservableObject {
                     self.cleanupProgress = pct
                 }
             }
+            let cleanedPaths = Set(summary.logEntries.filter { $0.status == .cleaned }.map(\.path))
+            self.pruneCleanedCategories(cleanedPaths)
             self.cleanupSummary = summary
             self.stats.totalSystemJunkCleanedBytes += summary.bytesFreed
             self.stats.monthlyCleanedBytes += summary.bytesFreed
@@ -1053,6 +1095,39 @@ public final class AppState: ObservableObject {
             FileSystemHelpers.playCompletionSound(enabled: self.settings.playSounds)
             self.playVoiceCue(.cleanupComplete)
         }
+    }
+
+    public func pruneCleanedCategories(_ cleanedPaths: Set<String>) {
+        guard !cleanedPaths.isEmpty else { return }
+        for cIdx in cleanupCategories.indices.reversed() {
+            for gIdx in cleanupCategories[cIdx].groups.indices.reversed() {
+                cleanupCategories[cIdx].groups[gIdx].items.removeAll { cleanedPaths.contains($0.path) }
+                if cleanupCategories[cIdx].groups[gIdx].items.isEmpty {
+                    cleanupCategories[cIdx].groups.remove(at: gIdx)
+                }
+            }
+            if cleanupCategories[cIdx].groups.isEmpty {
+                cleanupCategories.remove(at: cIdx)
+            }
+        }
+    }
+
+    public func pruneCleanedClutter(_ cleanedPaths: Set<String>) {
+        guard !cleanedPaths.isEmpty else { return }
+        for gIdx in clutterResult.duplicateGroups.indices.reversed() {
+            clutterResult.duplicateGroups[gIdx].copies.removeAll { cleanedPaths.contains($0.path) }
+            if clutterResult.duplicateGroups[gIdx].copies.count < 2 {
+                clutterResult.duplicateGroups.remove(at: gIdx)
+            }
+        }
+        for gIdx in clutterResult.similarImageGroups.indices.reversed() {
+            clutterResult.similarImageGroups[gIdx].images.removeAll { cleanedPaths.contains($0.path) }
+            if clutterResult.similarImageGroups[gIdx].images.count < 2 {
+                clutterResult.similarImageGroups.remove(at: gIdx)
+            }
+        }
+        clutterResult.largeAndOldFiles.removeAll { cleanedPaths.contains($0.path) }
+        clutterResult.downloads.removeAll { cleanedPaths.contains($0.path) }
     }
 
     public func startProtectionScan() {
@@ -1235,6 +1310,8 @@ public final class AppState: ObservableObject {
                 }
             }
             if Task.isCancelled { return }
+            let cleanedPaths = Set(summary.logEntries.filter { $0.status == .cleaned }.map(\.path))
+            self.devAISweeperResult.items.removeAll { cleanedPaths.contains($0.path) }
             self.stats.totalSystemJunkCleanedBytes += summary.bytesFreed
             self.stats.monthlyCleanedBytes += summary.bytesFreed
             self.stats.totalTimeSavedMinutes += max(5, summary.itemsProcessed * 2)
@@ -1439,10 +1516,18 @@ public final class AppState: ObservableObject {
         case "mailAttachments": startCleanupScan(focusedCategory: "mailAttachments")
         case "trashBins": startCleanupScan(focusedCategory: "trashBins")
         case "aiClutter": startCleanupScan(focusedCategory: "aiClutter")
-        case "malwareFinder", "privacyItems", "applicationPermissions": startProtectionScan()
-        case "maintenanceTasks", "loginItems", "backgroundItems", "timeMachine": startPerformanceScan()
-        case "uninstaller", "appUpdater", "appLeftovers": startApplicationsScan(checkUpdatesOnline: tool.focusedFlowID == "appUpdater")
-        case "duplicateFinder", "similarImages", "largeAndOld", "downloads": startClutterScan()
+        case "malwareFinder", "privacyItems", "applicationPermissions":
+            protectionFocusedTab = tool.focusedFlowID
+            startProtectionScan()
+        case "maintenanceTasks", "loginItems", "backgroundItems", "timeMachine":
+            performanceFocusedTab = tool.focusedFlowID
+            startPerformanceScan()
+        case "uninstaller", "appUpdater", "appLeftovers":
+            applicationsFocusedTab = tool.focusedFlowID
+            startApplicationsScan(checkUpdatesOnline: tool.focusedFlowID == "appUpdater")
+        case "duplicateFinder", "similarImages", "largeAndOld", "downloads":
+            clutterFocusedTab = tool.focusedFlowID
+            startClutterScan()
         case "spaceLens": startSpaceLensScan()
         case "devAISweeper": startDevAISweeperScan()
         case "portKiller": refreshListeningPorts()

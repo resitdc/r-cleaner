@@ -482,11 +482,18 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
             return
         }
         playbackGeneration += 1
+        let gen = playbackGeneration
         lastSpokenLine = transcript
         isSpeaking = true
         fallbackAudioPlayer = directPlayer
         directPlayer.volume = 1.0
         directPlayer.play()
+        let durationNs = UInt64(max(0.5, directPlayer.duration + 0.12) * 1_000_000_000)
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: durationNs)
+            guard let self, self.playbackGeneration == gen else { return }
+            self.isSpeaking = false
+        }
     }
 
     /// Procedurally generates a soft 75ms dual-harmonic cyan HUD chime (880 Hz + 1320 Hz).

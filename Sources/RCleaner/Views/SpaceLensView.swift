@@ -172,6 +172,8 @@ public struct SpaceLensView: View {
                     ) { tapped in
                         if tapped.isDirectory {
                             drillInto(tapped)
+                        } else if tapped.isCloudOnlyEvicted {
+                            appState.showBanner("Cloud-only placeholder occupies 0 bytes on local disk")
                         } else {
                             tapped.isSelected.toggle()
                             appState.objectWillChange.send()
@@ -289,6 +291,9 @@ public struct SpaceLensView: View {
                         Button("Deselect") {
                             node.isSelected = false
                             appState.objectWillChange.send()
+                            if appState.spaceLensRoot.map({ appState.spaceLensService.collectSelectedNodes(from: $0).isEmpty }) == true {
+                                showReviewSheet = false
+                            }
                         }
                         .controlSize(.small)
                     }
@@ -305,6 +310,7 @@ public struct SpaceLensView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(selectedNodes.isEmpty)
                 }
                 .padding()
             }
@@ -348,12 +354,31 @@ public struct SpaceLensView: View {
         Task {
             appState.spaceLensStage = .cleaning
             let res = await appState.spaceLensService.removeSelectedNodes(nodes)
+            let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+            if let root = appState.spaceLensRoot {
+                Self.pruneNodes(in: root, cleanedPaths: cleanedPaths)
+            }
             appState.stats.totalPersonalFilesCleanedBytes += res.bytesFreed
             appState.stats.monthlyCleanedBytes += res.bytesFreed
             appState.spaceLensSummary = res
             appState.spaceLensStage = .complete
             appState.refreshTelemetry(includeHeavy: true)
         }
+    }
+
+    private static func pruneNodes(in node: SpaceLensNode, cleanedPaths: Set<String>) {
+        guard !cleanedPaths.isEmpty else { return }
+        var removedBytes: Int64 = 0
+        for child in node.children where cleanedPaths.contains(child.path) {
+            removedBytes += child.sizeBytes
+        }
+        node.children.removeAll { cleanedPaths.contains($0.path) }
+        for child in node.children {
+            let before = child.sizeBytes
+            pruneNodes(in: child, cleanedPaths: cleanedPaths)
+            removedBytes += max(0, before - child.sizeBytes)
+        }
+        node.sizeBytes = max(0, node.sizeBytes - removedBytes)
     }
 }
 

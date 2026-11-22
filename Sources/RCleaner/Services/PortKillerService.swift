@@ -215,7 +215,7 @@ public final class PortKillerService: @unchecked Sendable {
             let parts = trimmed.split(maxSplits: 4, omittingEmptySubsequences: true, whereSeparator: \.isWhitespace)
             guard parts.count >= 5,
                   let pid = Int32(parts[0]),
-                  let cpu = Double(parts[1]),
+                  let cpu = Double(String(parts[1]).replacingOccurrences(of: ",", with: ".")),
                   let rssKB = Int64(parts[2]) else { continue }
             let etime = Self.formatElapsed(String(parts[3]))
             let comm = String(parts[4])

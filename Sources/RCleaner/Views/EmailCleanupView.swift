@@ -122,38 +122,75 @@ public struct EmailCleanupView: View {
 
                     // Right Messages List
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(selectedCategory.rawValue).font(.title3.bold()).foregroundStyle(.white)
-                        Text(selectedCategory.description).font(.caption).foregroundStyle(.white.opacity(0.65))
-
-                        ScrollView {
-                            LazyVStack(spacing: 7) {
-                                ForEach(filteredIndices, id: \.self) { idx in
-                                    let msg = appState.emailMessages[idx]
-                                    HStack(spacing: 10) {
-                                        Toggle("", isOn: $appState.emailMessages[idx].isSelected).toggleStyle(.checkbox).labelsHidden()
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            HStack(spacing: 6) {
-                                                Text(msg.senderName).font(.system(size: 13, weight: .bold)).foregroundStyle(.white).lineLimit(1)
-                                                Text(msg.suggestionTag)
-                                                    .font(.system(size: 9, weight: .bold))
-                                                    .padding(.horizontal, 6).padding(.vertical, 2)
-                                                    .background(Capsule().fill(palette.primary.opacity(0.3)))
-                                                    .foregroundStyle(palette.accent)
-                                            }
-                                            Text(msg.subject).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
-                                            Text(msg.snippet).font(.system(size: 11)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
-                                        }
-                                        Spacer()
-                                        Text(ByteFormat.string(msg.sizeBytes)).font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.7))
-                                        Button {
-                                            previewMessage = msg
-                                        } label: {
-                                            Image(systemName: "eye").foregroundStyle(.white.opacity(0.7))
-                                        }
-                                        .buttonStyle(.plain)
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(selectedCategory.rawValue).font(.title3.bold()).foregroundStyle(.white)
+                                Text(selectedCategory.description).font(.caption).foregroundStyle(.white.opacity(0.65))
+                            }
+                            Spacer()
+                            if !filteredIndices.isEmpty {
+                                let allCategorySelected = filteredIndices.allSatisfy { appState.emailMessages[$0].isSelected }
+                                Button(allCategorySelected ? "Deselect All" : "Select All") {
+                                    let nextVal = !allCategorySelected
+                                    for idx in filteredIndices {
+                                        appState.emailMessages[idx].isSelected = nextVal
                                     }
-                                    .padding(10)
-                                    .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)))
+                                }
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 5)
+                                .background(Capsule().fill(Color.white.opacity(0.12)))
+                                .buttonStyle(.plain)
+                            }
+                        }
+
+                        if filteredIndices.isEmpty {
+                            VStack(spacing: 10) {
+                                Spacer()
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 42))
+                                    .foregroundStyle(palette.accent.opacity(0.85))
+                                Text("No emails in \(selectedCategory.rawValue)")
+                                    .font(.system(size: 15, weight: .bold))
+                                    .foregroundStyle(.white)
+                                Text("This category is currently clean.")
+                                    .font(.system(size: 12))
+                                    .foregroundStyle(.white.opacity(0.6))
+                                Spacer()
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        } else {
+                            ScrollView {
+                                LazyVStack(spacing: 7) {
+                                    ForEach(filteredIndices, id: \.self) { idx in
+                                        let msg = appState.emailMessages[idx]
+                                        HStack(spacing: 10) {
+                                            Toggle("", isOn: $appState.emailMessages[idx].isSelected).toggleStyle(.checkbox).labelsHidden()
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                HStack(spacing: 6) {
+                                                    Text(msg.senderName).font(.system(size: 13, weight: .bold)).foregroundStyle(.white).lineLimit(1)
+                                                    Text(msg.suggestionTag)
+                                                        .font(.system(size: 9, weight: .bold))
+                                                        .padding(.horizontal, 6).padding(.vertical, 2)
+                                                        .background(Capsule().fill(palette.primary.opacity(0.3)))
+                                                        .foregroundStyle(palette.accent)
+                                                }
+                                                Text(msg.subject).font(.system(size: 12, weight: .medium)).foregroundStyle(.white.opacity(0.9)).lineLimit(1)
+                                                Text(msg.snippet).font(.system(size: 11)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
+                                            }
+                                            Spacer()
+                                            Text(ByteFormat.string(msg.sizeBytes)).font(.caption.monospacedDigit()).foregroundStyle(.white.opacity(0.7))
+                                            Button {
+                                                previewMessage = msg
+                                            } label: {
+                                                Image(systemName: "eye").foregroundStyle(.white.opacity(0.7))
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                        .padding(10)
+                                        .background(RoundedRectangle(cornerRadius: 12).fill(Color.white.opacity(0.06)))
+                                    }
                                 }
                             }
                         }
@@ -175,8 +212,16 @@ public struct EmailCleanupView: View {
                             return (m.subject, p, m.sizeBytes)
                         }
                         let res = await appState.clutterService.removeFiles(paths: paths)
+                        let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+                        appState.emailMessages.removeAll { msg in
+                            guard let p = msg.filePath else { return false }
+                            return cleanedPaths.contains(p)
+                        }
+                        appState.stats.totalSystemJunkCleanedBytes += res.bytesFreed
+                        appState.stats.monthlyCleanedBytes += res.bytesFreed
                         appState.emailSummary = res
                         appState.emailStage = .complete
+                        appState.refreshTelemetry(includeHeavy: true)
                     }
                 }
                 .padding(.vertical, 10)

@@ -294,6 +294,9 @@ final class RCleanerTests: XCTestCase {
         XCTAssertEqual(VoiceCommandParser.parse("Stop"), .stopScan)
         XCTAssertEqual(VoiceCommandParser.parse("Mute voice"), .muteVoice)
         XCTAssertEqual(VoiceCommandParser.parse("Open Applications"), .openModule(.applications))
+        XCTAssertEqual(VoiceCommandParser.parse("Open Port Killer"), .openModule(.portKiller))
+        XCTAssertEqual(VoiceCommandParser.parse("Check listening ports"), .openModule(.portKiller))
+        XCTAssertEqual(VoiceCommandParser.parse("Open Cryo-Freezer"), .openModule(.cryoFreezer))
         if case .unknown = VoiceCommandParser.parse("play some jazz music") {
             // expected
         } else {
@@ -509,6 +512,7 @@ final class RCleanerTests: XCTestCase {
         // Verify safety guards never allow freezing Finder, WindowServer, launchd, or R-Cleaner itself
         XCTAssertTrue(CryoFreezerService.isProtectedProcess(pid: 1, processName: "launchd", executablePath: "/sbin/launchd"))
         XCTAssertTrue(CryoFreezerService.isProtectedProcess(pid: 450, processName: "Finder", executablePath: "/System/Library/CoreServices/Finder.app/Contents/MacOS/Finder", bundleIdentifier: "com.apple.finder"))
+        XCTAssertTrue(CryoFreezerService.isProtectedProcess(pid: 455, processName: "opendirectoryd", executablePath: "/usr/libexec/opendirectoryd"))
         XCTAssertTrue(CryoFreezerService.isProtectedProcess(pid: getpid(), processName: "R-Cleaner", executablePath: "/Applications/R-Cleaner.app/Contents/MacOS/R-Cleaner"))
         XCTAssertFalse(CryoFreezerService.isProtectedProcess(pid: 512, processName: "qemu-system-aarch64", executablePath: "/Users/dev/Library/Android/sdk/emulator/qemu-system-aarch64"))
     }

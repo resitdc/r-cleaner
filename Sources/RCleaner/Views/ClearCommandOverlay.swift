@@ -13,6 +13,8 @@ public struct ClearCommandOverlay: View {
     private let suggestedCommands: [(label: String, icon: String, phrase: String)] = [
         ("Run Smart Care", "sparkles", "Run Smart Care"),
         ("Dev & AI Sweeper", "terminal.fill", "Launch Dev & AI Sweeper"),
+        ("Port Killer", "network.badge.shield.half.filled", "Open Port Killer"),
+        ("Cryo-Freezer", "snowflake", "Open Cryo-Freezer"),
         ("What's eating my CPU?", "cpu.fill", "What's eating my CPU"),
         ("What's using my RAM?", "memorychip.fill", "What's using my RAM"),
         ("Free Up RAM", "bolt.fill", "Free up RAM"),

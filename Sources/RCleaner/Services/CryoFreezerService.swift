@@ -19,7 +19,7 @@ public final class CryoFreezerService: @unchecked Sendable {
         "ControlCenter", "loginwindow", "coreaudiod", "bluetoothd", "cfprefsd",
         "UserEventAgent", "NotificationCenter", "Spotlight", "WallpaperAgent",
         "R-Cleaner", "RCleaner", "Terminal", "iTerm2", "Warp", "Ghostty", "Alacritty",
-        "securityd", "trustd", " opendirectoryd", "mds", "mds_stores", "distnoted",
+        "securityd", "trustd", "opendirectoryd", "mds", "mds_stores", "distnoted",
         "hidd", "powerd", "logd", "configd", "WiFiAgent", "audiomxd"
     ]
 

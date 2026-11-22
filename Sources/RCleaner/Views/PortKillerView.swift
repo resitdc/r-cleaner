@@ -661,7 +661,7 @@ public struct PortKillerView: View {
                     Circle()
                         .fill(autoRefreshEnabled ? Color(hex: "2ED573") : Color.white.opacity(0.3))
                         .frame(width: 6, height: 6)
-                    Text(autoRefreshEnabled ? "Live plasma radar active (every 4s)" : "Live updates paused")
+                    Text(autoRefreshEnabled ? "Live plasma radar active" : "Live updates paused")
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundStyle(.white.opacity(0.62))
                 }
@@ -1375,12 +1375,18 @@ private struct PortBubbleInspectorCard: View {
                 Spacer(minLength: 0)
             }
 
-            // 4 Mini Telemetry Pills (PID, RAM, CPU, Uptime)
-            HStack(spacing: 6) {
+            // Symmetrical 2x2 Telemetry Grid (PID, RAM, CPU, Uptime — Never Truncates!)
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 6),
+                    GridItem(.flexible(), spacing: 6)
+                ],
+                spacing: 6
+            ) {
                 metricBox(title: "PID", value: String(item.pid))
-                metricBox(title: "RAM", value: item.memoryBytes > 0 ? ByteFormat.string(item.memoryBytes) : "—")
+                metricBox(title: "MEMORY", value: item.memoryBytes > 0 ? ByteFormat.string(item.memoryBytes) : "—")
                 metricBox(
-                    title: "CPU",
+                    title: "CPU LOAD",
                     value: String(format: "%.1f%%", item.cpuPercent),
                     highlight: item.cpuPercent >= 5.0 ? Color(hex: "FF9F43") : nil
                 )

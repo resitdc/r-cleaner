@@ -228,6 +228,9 @@ public enum VoiceCommandParser {
         if text.contains("performance") || text.contains("maintenance") || text.contains("login item") {
             return .openModule(.performance)
         }
+        if text.contains("port") || text.contains("localhost") || text.contains("dev server") || text.contains("listening") {
+            return .openModule(.portKiller)
+        }
         if text.contains("cryo") || text.contains("freeze") || text.contains("freezer") || text.contains("memory leak") || text.contains("pulse") {
             return .openModule(.cryoFreezer)
         }

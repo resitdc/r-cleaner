@@ -58,6 +58,16 @@ public struct ApplicationsView: View {
 
         case .resultsOverview, .dataManager:
             applicationsManagerView
+                .onAppear {
+                    if let focused = appState.applicationsFocusedTab {
+                        switch focused {
+                        case "appUpdater": selectedTab = .updater
+                        case "appLeftovers": selectedTab = .leftovers
+                        default: selectedTab = .uninstaller
+                        }
+                        appState.applicationsFocusedTab = nil
+                    }
+                }
 
         case .cleaning:
             ScanningProgressView(
@@ -311,6 +321,8 @@ public struct ApplicationsView: View {
                     Task {
                         appState.applicationsStage = .cleaning
                         let res = await appState.applicationsService.uninstallApps(selectedApps, resetOnly: false)
+                        let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+                        appState.applicationsResult.installedApps.removeAll { cleanedPaths.contains($0.path) }
                         let uninstalledAppsCount = res.logEntries.filter { $0.status == .cleaned && !$0.itemName.contains(" — ") }.count
                         appState.stats.totalApplicationsCleanedBytes += res.bytesFreed
                         appState.stats.totalAppsUninstalled += uninstalledAppsCount
@@ -430,6 +442,8 @@ public struct ApplicationsView: View {
                     Task {
                         appState.applicationsStage = .cleaning
                         let res = await appState.clutterService.removeFiles(paths: selected.map { ($0.name, $0.path, $0.sizeBytes) })
+                        let cleanedPaths = Set(res.logEntries.filter { $0.status == .cleaned }.map(\.path))
+                        items.wrappedValue.removeAll { cleanedPaths.contains($0.path) }
                         appState.stats.totalApplicationsCleanedBytes += res.bytesFreed
                         appState.stats.monthlyCleanedBytes += res.bytesFreed
                         appState.applicationsSummary = res
