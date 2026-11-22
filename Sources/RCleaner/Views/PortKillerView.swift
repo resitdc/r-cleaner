@@ -816,6 +816,154 @@ private struct PlasmaRadarBackdropCanvas: View {
     }
 }
 
+// MARK: - Gravity Plasma Bubble Layout Engine (Spacious, Aspect-Aware & Non-Cramped)
+
+private struct PortPlasmaBubblePacker {
+    static func pack(weights: [Double], in canvasSize: CGSize, padding: CGFloat = 34) -> [PackedBubbleLayout] {
+        guard !weights.isEmpty, canvasSize.width > 80, canvasSize.height > 80 else { return [] }
+        let maxW = max(1.0, weights.max() ?? 1.0)
+        let minW = max(1.0, weights.min() ?? 1.0)
+
+        // Balanced virtual radii (52...92) so no bubble is too tiny or overwhelmingly huge
+        let virtualRadii: [CGFloat] = weights.map { w in
+            let norm: Double
+            if maxW > minW {
+                norm = (w - minW) / (maxW - minW)
+            } else {
+                norm = 0.5
+            }
+            return CGFloat(52.0 + pow(max(0, min(1, norm)), 0.65) * 40.0)
+        }
+
+        // Generous gap between bubbles so they never feel crowded or touch each other
+        let gap: CGFloat = 32.0
+        let availW = max(120, canvasSize.width - padding * 2)
+        let availH = max(120, canvasSize.height - padding * 2)
+        let aspect = max(1.0, min(1.65, availW / availH))
+
+        var placed: [(idx: Int, x: CGFloat, y: CGFloat, r: CGFloat)] = []
+        placed.reserveCapacity(weights.count)
+
+        for (i, r) in virtualRadii.enumerated() {
+            if i == 0 {
+                placed.append((0, 0, 0, r))
+                continue
+            }
+            if i == 1 {
+                placed.append((1, placed[0].r + r + gap, 4, r))
+                continue
+            }
+
+            // Compute weighted centroid
+            var sumW: CGFloat = 0
+            var cx: CGFloat = 0
+            var cy: CGFloat = 0
+            for p in placed {
+                let w = p.r * p.r
+                cx += p.x * w
+                cy += p.y * w
+                sumW += w
+            }
+            if sumW > 0 {
+                cx /= sumW
+                cy /= sumW
+            }
+
+            var bestPoint: (x: CGFloat, y: CGFloat)? = nil
+            var bestScore: CGFloat = .greatestFiniteMagnitude
+
+            func evaluateCandidate(x: CGFloat, y: CGFloat) {
+                for ex in placed {
+                    let minDist = ex.r + r + gap - 0.5
+                    let dx = x - ex.x
+                    let dy = y - ex.y
+                    if dx * dx + dy * dy < minDist * minDist {
+                        return
+                    }
+                }
+                // Aspect-aware elliptical distance so bubbles spread horizontally across the wide arena
+                let normDX = (x - cx) / aspect
+                let normDY = (y - cy) * 1.08
+                let score = hypot(normDX, normDY)
+                if score < bestScore {
+                    bestScore = score
+                    bestPoint = (x, y)
+                }
+            }
+
+            // Pair-tangent candidate positions with generous `gap`
+            for aIdx in 0..<placed.count {
+                let a = placed[aIdx]
+                for bIdx in (aIdx + 1)..<placed.count {
+                    let b = placed[bIdx]
+                    let dx = b.x - a.x
+                    let dy = b.y - a.y
+                    let d = hypot(dx, dy)
+                    let da = a.r + r + gap
+                    let db = b.r + r + gap
+                    guard d > 0.001, d <= da + db, d >= abs(da - db) else { continue }
+
+                    let aDist = (da * da - db * db + d * d) / (2 * d)
+                    let h = sqrt(max(0, da * da - aDist * aDist))
+                    let px = a.x + aDist * dx / d
+                    let py = a.y + aDist * dy / d
+                    let rx = -dy * (h / d)
+                    let ry = dx * (h / d)
+
+                    evaluateCandidate(x: px + rx, y: py + ry)
+                    evaluateCandidate(x: px - rx, y: py - ry)
+                }
+            }
+
+            // Radial sweep fallback around existing bubbles
+            if bestPoint == nil {
+                for anchor in placed {
+                    let dist = anchor.r + r + gap
+                    for step in 0..<32 {
+                        let angle = CGFloat(step) * (.pi * 2.0 / 32.0)
+                        evaluateCandidate(x: anchor.x + cos(angle) * dist, y: anchor.y + sin(angle) * dist)
+                    }
+                }
+            }
+
+            let chosen = bestPoint ?? (placed[0].x + placed[0].r + r + gap, 0)
+            placed.append((i, chosen.x, chosen.y, r))
+        }
+
+        var minX = CGFloat.greatestFiniteMagnitude
+        var maxX = -CGFloat.greatestFiniteMagnitude
+        var minY = CGFloat.greatestFiniteMagnitude
+        var maxY = -CGFloat.greatestFiniteMagnitude
+        for p in placed {
+            minX = min(minX, p.x - p.r)
+            maxX = max(maxX, p.x + p.r)
+            minY = min(minY, p.y - p.r)
+            maxY = max(maxY, p.y + p.r)
+        }
+
+        let clusterW = max(1, maxX - minX)
+        let clusterH = max(1, maxY - minY)
+        let maxSingleScale: CGFloat = placed.count == 1 ? (min(availW, availH) * 0.28 / max(1, placed[0].r)) : 0.88
+        let scale = min(availW / clusterW, availH / clusterH, maxSingleScale)
+
+        let midX = (minX + maxX) / 2
+        let midY = (minY + maxY) / 2
+        let canvasCX = canvasSize.width / 2
+        let canvasCY = canvasSize.height / 2
+
+        return placed.map { p in
+            PackedBubbleLayout(
+                index: p.idx,
+                center: CGPoint(
+                    x: canvasCX + (p.x - midX) * scale,
+                    y: canvasCY + (p.y - midY) * scale
+                ),
+                radius: max(34, p.r * scale)
+            )
+        }
+    }
+}
+
 // MARK: - Gravity Plasma Bubble Map Canvas
 
 private enum PortBubbleEntry: Identifiable {
@@ -829,27 +977,25 @@ private enum PortBubbleEntry: Identifiable {
         }
     }
 
-    /// Smart visual weight so Dev Servers, Databases, and high-RAM/CPU processes get proportional, legible bubbles
-    var visualWeight: Int64 {
+    /// Balanced visual weight so Dev Servers, Databases, and high-RAM/CPU processes get proportional, legible bubbles
+    var visualScore: Double {
         switch self {
         case .port(let item):
             let baseCategoryWeight: Double
             switch item.category {
-            case .devWebServer: baseCategoryWeight = 160.0
-            case .databaseCache: baseCategoryWeight = 135.0
-            case .aiAndMobile: baseCategoryWeight = 115.0
-            case .ideAndTools: baseCategoryWeight = 90.0
-            case .macOSSystem: baseCategoryWeight = 65.0
+            case .devWebServer: baseCategoryWeight = 100.0
+            case .databaseCache: baseCategoryWeight = 86.0
+            case .aiAndMobile: baseCategoryWeight = 76.0
+            case .ideAndTools: baseCategoryWeight = 62.0
+            case .macOSSystem: baseCategoryWeight = 48.0
             }
             let mb = max(1.0, Double(item.memoryBytes) / 1_048_576.0)
-            let ramBoost = sqrt(min(2000.0, mb)) * 8.5
-            let cpuBoost = min(100.0, item.cpuPercent) * 2.2
-            let lanBoost = item.isExposedToLAN ? 28.0 : 0.0
-            let totalScore = baseCategoryWeight + ramBoost + cpuBoost + lanBoost
-            return Int64(totalScore * totalScore)
+            let ramBoost = sqrt(min(1500.0, mb)) * 2.2
+            let cpuBoost = min(100.0, item.cpuPercent) * 0.75
+            let lanBoost = item.isExposedToLAN ? 12.0 : 0.0
+            return baseCategoryWeight + ramBoost + cpuBoost + lanBoost
         case .overflow(let count, _):
-            let score = 95.0 + Double(min(20, count)) * 3.0
-            return Int64(score * score)
+            return 64.0 + Double(min(20, count)) * 1.2
         }
     }
 }
@@ -864,24 +1010,41 @@ private struct PortPlasmaBubbleMapCanvas: View {
     let onQuickKill: (ActivePortItem) -> Void
     let onTapOverflow: () -> Void
 
+    /// Prioritizes distinct processes first so a single process with 4 ports doesn't crowd the bubble arena,
+    /// and caps at 9 individual bubbles (+1 overflow bubble) so every bubble has generous breathing room.
     private var entries: [PortBubbleEntry] {
-        let maxBubbles = 14
-        if items.count > maxBubbles + 1 {
-            let head = items.prefix(maxBubbles).map { PortBubbleEntry.port($0) }
-            let tail = items.dropFirst(maxBubbles)
-            let tailMem = tail.reduce(Int64(0)) { $0 + $1.memoryBytes }
-            return head + [.overflow(count: tail.count, totalMemory: tailMem)]
+        let maxBubbles = 9
+        guard items.count > maxBubbles + 1 else {
+            return items.map { PortBubbleEntry.port($0) }
         }
-        return items.map { PortBubbleEntry.port($0) }
+
+        var primary: [ActivePortItem] = []
+        var secondary: [ActivePortItem] = []
+        var seenPIDs: Set<Int32> = []
+
+        for item in items {
+            if item.category == .devWebServer || item.category == .databaseCache || !seenPIDs.contains(item.pid) {
+                primary.append(item)
+                seenPIDs.insert(item.pid)
+            } else {
+                secondary.append(item)
+            }
+        }
+
+        let ordered = primary + secondary
+        let head = ordered.prefix(maxBubbles).map { PortBubbleEntry.port($0) }
+        let tail = ordered.dropFirst(maxBubbles)
+        let tailMem = tail.reduce(Int64(0)) { $0 + $1.memoryBytes }
+        return head + [.overflow(count: tail.count, totalMemory: tailMem)]
     }
 
     var body: some View {
         let currentEntries = entries
-        let usableSize = CGSize(width: max(80, canvasSize.width), height: max(80, canvasSize.height - 28))
-        let packed = SpaceLensBubblePacker.pack(
-            sizes: currentEntries.map(\.visualWeight),
+        let usableSize = CGSize(width: max(100, canvasSize.width), height: max(100, canvasSize.height - 44))
+        let packed = PortPlasmaBubblePacker.pack(
+            weights: currentEntries.map(\.visualScore),
             in: usableSize,
-            padding: 24
+            padding: 36
         )
 
         ZStack {
@@ -907,7 +1070,7 @@ private struct PortPlasmaBubbleMapCanvas: View {
                         }
                     }
                 )
-                .position(x: layout.center.x, y: layout.center.y - 8)
+                .position(x: layout.center.x, y: layout.center.y - 12)
                 .animation(.spring(response: 0.38, dampingFraction: 0.78), value: layout.center)
             }
         }
@@ -950,21 +1113,21 @@ private struct PortPlasmaOrbView: View {
         let diameter = radius * 2
 
         ZStack {
-            // Outer LAN or High-CPU Warning Halo Ring
+            // Subtle Outer LAN or High-CPU Halo Ring (tight 6pt offset so it never crowds neighbors)
             if isLANExposed || isHighCPU {
                 Circle()
                     .strokeBorder(
-                        isHighCPU ? Color(hex: "FF9F43").opacity(0.75) : Color(hex: "FFB703").opacity(0.65),
-                        style: StrokeStyle(lineWidth: isSelected || isHovered ? 2.2 : 1.5, dash: isLANExposed ? [5, 3] : [])
+                        isHighCPU ? Color(hex: "FF9F43").opacity(0.70) : Color(hex: "FFB703").opacity(0.60),
+                        style: StrokeStyle(lineWidth: isSelected || isHovered ? 1.8 : 1.2, dash: isLANExposed ? [5, 3] : [])
                     )
-                    .frame(width: diameter + 10, height: diameter + 10)
+                    .frame(width: diameter + 7, height: diameter + 7)
             }
 
             // Pop Shockwave Ring when killing port
             if isPopping {
                 Circle()
                     .stroke(Color(hex: "FF5E57"), lineWidth: 3)
-                    .frame(width: diameter * 1.35, height: diameter * 1.35)
+                    .frame(width: diameter * 1.30, height: diameter * 1.30)
                     .opacity(0.0)
             }
 
@@ -974,7 +1137,7 @@ private struct PortPlasmaOrbView: View {
             // Inner Typography & Port Info
             orbContent
 
-            // Floating Quick-Action Pill on Hover (Open / Pop-Kill)
+            // Floating Quick-Action Pill on Hover (tucked cleanly inside bottom rim)
             if isHovered, case .port(let item) = entry, radius >= 38 {
                 VStack {
                     Spacer()
@@ -984,11 +1147,11 @@ private struct PortPlasmaOrbView: View {
                                 NSWorkspace.shared.open(webURL)
                             } label: {
                                 Image(systemName: "arrow.up.right")
-                                    .font(.system(size: 9.5, weight: .bold))
+                                    .font(.system(size: 9, weight: .bold))
                                     .foregroundStyle(Color(hex: "00F5D4"))
-                                    .frame(width: 22, height: 22)
-                                    .background(Circle().fill(Color.black.opacity(0.72)))
-                                    .overlay(Circle().strokeBorder(Color(hex: "00F5D4").opacity(0.6), lineWidth: 1))
+                                    .frame(width: 21, height: 21)
+                                    .background(Circle().fill(Color.black.opacity(0.78)))
+                                    .overlay(Circle().strokeBorder(Color(hex: "00F5D4").opacity(0.65), lineWidth: 1))
                             }
                             .buttonStyle(.plain)
                             .help("Open http://localhost:\(String(item.port))")
@@ -999,33 +1162,33 @@ private struct PortPlasmaOrbView: View {
                                 HStack(spacing: 3) {
                                     Image(systemName: "bolt.slash.fill")
                                         .font(.system(size: 8.5, weight: .bold))
-                                    if radius >= 54 {
+                                    if radius >= 48 {
                                         Text("Kill")
                                             .font(.system(size: 9.5, weight: .bold))
                                     }
                                 }
                                 .foregroundStyle(.white)
-                                .padding(.horizontal, radius >= 54 ? 8 : 6)
-                                .padding(.vertical, 4)
+                                .padding(.horizontal, radius >= 48 ? 8 : 6)
+                                .padding(.vertical, 3.5)
                                 .background(Capsule().fill(Color(hex: "FF5E57")))
-                                .shadow(color: Color(hex: "FF5E57").opacity(0.6), radius: 5)
+                                .shadow(color: Color(hex: "FF5E57").opacity(0.55), radius: 4)
                             }
                             .buttonStyle(.plain)
                             .help("Pop & stop port :\(String(item.port))")
                         }
                     }
-                    .offset(y: 6)
+                    .padding(.bottom, 5)
                 }
                 .frame(width: diameter, height: diameter)
             }
         }
-        .frame(width: diameter + 12, height: diameter + 12)
+        .frame(width: diameter + 8, height: diameter + 8)
         .contentShape(Circle())
         .onTapGesture(perform: onTap)
-        .scaleEffect(isPopping ? 0.02 : (isHovered ? 1.07 : (isSelected ? 1.03 : 1.0)))
+        .scaleEffect(isPopping ? 0.02 : (isHovered ? 1.05 : (isSelected ? 1.02 : 1.0)))
         .opacity(isPopping ? 0.0 : 1.0)
-        .animation(.spring(response: 0.26, dampingFraction: 0.72), value: isHovered)
-        .animation(.spring(response: 0.26, dampingFraction: 0.72), value: isSelected)
+        .animation(.spring(response: 0.26, dampingFraction: 0.74), value: isHovered)
+        .animation(.spring(response: 0.26, dampingFraction: 0.74), value: isSelected)
         .animation(.easeIn(duration: 0.24), value: isPopping)
         .onHover { isHovered = $0 }
     }
@@ -1036,10 +1199,10 @@ private struct PortPlasmaOrbView: View {
             .fill(
                 RadialGradient(
                     stops: [
-                        .init(color: Color.black.opacity(isHovered ? 0.22 : 0.34), location: 0.0),
-                        .init(color: tint.opacity(isHovered ? 0.28 : 0.18), location: 0.55),
-                        .init(color: tint.opacity(isHovered ? 0.56 : 0.40), location: 0.88),
-                        .init(color: rimColor.opacity(isHovered ? 0.82 : 0.64), location: 1.0)
+                        .init(color: Color.black.opacity(isHovered ? 0.24 : 0.36), location: 0.0),
+                        .init(color: tint.opacity(isHovered ? 0.26 : 0.17), location: 0.56),
+                        .init(color: tint.opacity(isHovered ? 0.54 : 0.38), location: 0.88),
+                        .init(color: rimColor.opacity(isHovered ? 0.80 : 0.62), location: 1.0)
                     ],
                     center: .center,
                     startRadius: 0,
@@ -1047,14 +1210,13 @@ private struct PortPlasmaOrbView: View {
                 )
             )
             .overlay(
-                // Top-left glass specular highlight
                 Circle()
                     .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(isHovered ? 0.28 : 0.18),
+                                Color.white.opacity(isHovered ? 0.26 : 0.16),
                                 Color.clear,
-                                tint.opacity(0.10)
+                                tint.opacity(0.08)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -1066,33 +1228,33 @@ private struct PortPlasmaOrbView: View {
                     .strokeBorder(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(isSelected ? 0.98 : (isHovered ? 0.80 : 0.48)),
-                                tint.opacity(isHovered ? 0.75 : 0.42),
-                                Color.white.opacity(isSelected ? 0.90 : 0.35)
+                                Color.white.opacity(isSelected ? 0.98 : (isHovered ? 0.78 : 0.46)),
+                                tint.opacity(isHovered ? 0.72 : 0.40),
+                                Color.white.opacity(isSelected ? 0.88 : 0.32)
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
                         ),
-                        lineWidth: isSelected ? 2.6 : (isHovered ? 1.9 : 1.2)
+                        lineWidth: isSelected ? 2.4 : (isHovered ? 1.8 : 1.15)
                     )
             )
             .frame(width: diameter, height: diameter)
-            .shadow(color: tint.opacity(isSelected ? 0.52 : (isHovered ? 0.42 : 0.20)), radius: isSelected ? 18 : (isHovered ? 14 : 8))
+            .shadow(color: tint.opacity(isSelected ? 0.46 : (isHovered ? 0.36 : 0.16)), radius: isSelected ? 14 : (isHovered ? 11 : 6))
     }
 
     @ViewBuilder
     private var orbContent: some View {
         switch entry {
         case .port(let item):
-            VStack(spacing: radius >= 58 ? 3 : 1) {
-                if radius >= 48 {
+            VStack(spacing: radius >= 54 ? 3 : 1.5) {
+                if radius >= 44 {
                     HStack(spacing: 4) {
                         Image(systemName: item.category.iconName)
-                            .font(.system(size: min(12, max(8.5, radius * 0.16)), weight: .bold))
+                            .font(.system(size: min(11, max(8.5, radius * 0.16)), weight: .bold))
                             .foregroundStyle(tint)
-                        if item.isExposedToLAN && radius >= 56 {
+                        if item.isExposedToLAN && radius >= 50 {
                             Text("LAN")
-                                .font(.system(size: 8.5, weight: .heavy))
+                                .font(.system(size: 8, weight: .heavy))
                                 .foregroundStyle(Color(hex: "FFB703"))
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
@@ -1103,45 +1265,43 @@ private struct PortPlasmaOrbView: View {
 
                 // Giant Monospace Port Label (:5173)
                 Text(":\(String(item.port))")
-                    .font(.system(size: min(22, max(10.5, radius * 0.32)), weight: .heavy, design: .monospaced))
+                    .font(.system(size: min(19, max(11.5, radius * 0.31)), weight: .heavy, design: .monospaced))
                     .foregroundStyle(.white)
                     .shadow(color: Color.black.opacity(0.45), radius: 3, y: 1)
                     .lineLimit(1)
 
                 // Project / Process Name
-                if radius >= 34 {
-                    Text(item.displayTitle)
-                        .font(.system(size: min(13, max(9.0, radius * 0.17)), weight: .bold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.92))
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                        .frame(maxWidth: radius * 1.62)
-                }
+                Text(item.displayTitle)
+                    .font(.system(size: min(12, max(9.5, radius * 0.175)), weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .frame(maxWidth: radius * 1.44)
 
-                // Framework & RAM / CPU Pill on larger bubbles
-                if radius >= 56 {
+                // Framework & RAM / CPU Pill on larger bubbles (hidden while hovered so quick-action pill fits cleanly)
+                if radius >= 54 && !isHovered {
                     Text(item.cpuPercent >= 5.0
                          ? String(format: "%@ • %.0f%% CPU", item.frameworkLabel, item.cpuPercent)
                          : (item.memoryBytes > 0 ? "\(item.frameworkLabel) • \(ByteFormat.string(item.memoryBytes))" : item.frameworkLabel))
-                        .font(.system(size: min(10.5, max(8.5, radius * 0.135)), weight: .semibold).monospacedDigit())
-                        .foregroundStyle(item.cpuPercent >= 5.0 ? Color(hex: "FF9F43") : .white.opacity(0.76))
+                        .font(.system(size: min(10, max(8.5, radius * 0.13)), weight: .semibold).monospacedDigit())
+                        .foregroundStyle(item.cpuPercent >= 5.0 ? Color(hex: "FF9F43") : .white.opacity(0.72))
                         .lineLimit(1)
-                        .frame(maxWidth: radius * 1.55)
+                        .frame(maxWidth: radius * 1.35)
                 }
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 8)
 
         case .overflow(let count, let totalMemory):
             VStack(spacing: 3) {
                 Image(systemName: "plus.circle.fill")
-                    .font(.system(size: min(18, max(12, radius * 0.28))))
+                    .font(.system(size: min(17, max(12, radius * 0.27))))
                     .foregroundStyle(palette.accent)
                 Text("+\(count) Ports")
-                    .font(.system(size: min(14, max(10, radius * 0.22)), weight: .bold, design: .rounded))
+                    .font(.system(size: min(13.5, max(10, radius * 0.22)), weight: .bold, design: .rounded))
                     .foregroundStyle(.white)
-                if radius >= 46 && totalMemory > 0 {
+                if radius >= 44 && totalMemory > 0 {
                     Text(ByteFormat.string(totalMemory))
-                        .font(.system(size: 10, weight: .medium).monospacedDigit())
+                        .font(.system(size: 9.5, weight: .medium).monospacedDigit())
                         .foregroundStyle(.white.opacity(0.72))
                 }
             }
