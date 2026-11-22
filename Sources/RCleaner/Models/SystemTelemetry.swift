@@ -178,7 +178,7 @@ public enum SmartAlertKind: String, Hashable, Sendable {
     case thermalPressure
 }
 
-public struct JarvisSmartAlert: Identifiable, Equatable, Sendable {
+public struct ClearSmartAlert: Identifiable, Equatable, Sendable {
     public let id: String
     public let kind: SmartAlertKind
     public let title: String

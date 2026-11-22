@@ -59,8 +59,8 @@ public struct RCleanerApp: App {
                 .keyboardShortcut(",", modifiers: .command)
             }
             CommandMenu("Care") {
-                Button("Jarvis Voice Command...") {
-                    appState.openJarvisCommandDeck(startListening: true)
+                Button("Clear Voice Command...") {
+                    appState.openClearCommandDeck(startListening: true)
                 }
                 .keyboardShortcut("j", modifiers: [.command, .shift])
 

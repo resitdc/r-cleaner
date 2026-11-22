@@ -40,7 +40,7 @@ mkdir -p "$APP_DIR/Contents/MacOS" "$APP_DIR/Contents/Resources"
 cp "$BIN_PATH" "$APP_DIR/Contents/MacOS/${APP_NAME}"
 chmod +x "$APP_DIR/Contents/MacOS/${APP_NAME}"
 
-# Bundle built-in Jarvis Neural Voice Pack directly into Resources (zero user download required)
+# Bundle built-in Clear Neural Voice Pack directly into Resources (zero user download required)
 if [[ -d "$ROOT_DIR/Sources/RCleaner/Resources/VoicePack" ]]; then
     cp -R "$ROOT_DIR/Sources/RCleaner/Resources/VoicePack" "$APP_DIR/Contents/Resources/VoicePack"
 fi
@@ -100,9 +100,9 @@ cat > "$APP_DIR/Contents/Info.plist" <<EOF
     <key>NSLocationWhenInUseUsageDescription</key>
     <string>Allow R-Cleaner to inspect your current Wi-Fi network security settings.</string>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Allow R-Cleaner to listen for your two-way Jarvis voice commands locally on your Mac.</string>
+    <string>Allow R-Cleaner to listen for your two-way Clear voice commands locally on your Mac.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
-    <string>Allow R-Cleaner to transcribe your Jarvis voice commands on-device for hands-free Mac care.</string>
+    <string>Allow R-Cleaner to transcribe your Clear voice commands on-device for hands-free Mac care.</string>
 </dict>
 </plist>
 EOF

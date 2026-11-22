@@ -1,10 +1,10 @@
 import SwiftUI
 import AppKit
 
-/// Futuristic floating Jarvis Two-Way Voice Command HUD (triggered by ⌘⇧J or the top-right Mic button).
+/// Futuristic floating Clear Two-Way Voice Command HUD (triggered by ⌘⇧J or the top-right Mic button).
 /// Supports live on-device voice transcription, live arc-reactor audio reactivity, typed quick commands,
 /// suggested command chips, and interactive live telemetry response cards (e.g. Top CPU / RAM consumers).
-public struct JarvisCommandOverlay: View {
+public struct ClearCommandOverlay: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var commandService: VoiceCommandService
     @State private var typedCommand: String = ""
@@ -33,7 +33,7 @@ public struct JarvisCommandOverlay: View {
             Color.black.opacity(0.55)
                 .ignoresSafeArea()
                 .onTapGesture {
-                    appState.dismissJarvisCommandDeck()
+                    appState.dismissClearCommandDeck()
                 }
 
             VStack(spacing: 18) {
@@ -43,7 +43,7 @@ public struct JarvisCommandOverlay: View {
                         Image(systemName: "waveform.badge.mic")
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(Color(hex: "36E2F8"))
-                        Text("JARVIS VOICE COMMAND")
+                        Text("CLEAR VOICE COMMAND")
                             .font(.system(size: 12, weight: .heavy, design: .rounded))
                             .tracking(1.6)
                             .foregroundStyle(Color(hex: "36E2F8"))
@@ -59,7 +59,7 @@ public struct JarvisCommandOverlay: View {
                         .background(Capsule().fill(Color.white.opacity(0.08)))
 
                     Button {
-                        appState.dismissJarvisCommandDeck()
+                        appState.dismissClearCommandDeck()
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 18))
@@ -74,7 +74,7 @@ public struct JarvisCommandOverlay: View {
                     if commandService.isListening {
                         commandService.stopListening(triggerCallback: !commandService.liveTranscript.isEmpty)
                     } else {
-                        appState.startJarvisListening()
+                        appState.startClearListening()
                     }
                 } label: {
                     ZStack {
@@ -238,13 +238,13 @@ public struct JarvisCommandOverlay: View {
                             let cmd = typedCommand.trimmingCharacters(in: .whitespacesAndNewlines)
                             guard !cmd.isEmpty else { return }
                             typedCommand = ""
-                            appState.executeJarvisVoiceCommand(cmd)
+                            appState.executeClearVoiceCommand(cmd)
                         }
                     Button("Run") {
                         let cmd = typedCommand.trimmingCharacters(in: .whitespacesAndNewlines)
                         guard !cmd.isEmpty else { return }
                         typedCommand = ""
-                        appState.executeJarvisVoiceCommand(cmd)
+                        appState.executeClearVoiceCommand(cmd)
                     }
                     .font(.system(size: 11.5, weight: .bold))
                     .foregroundStyle(.white)
@@ -270,7 +270,7 @@ public struct JarvisCommandOverlay: View {
                         HStack(spacing: 7) {
                             ForEach(suggestedCommands, id: \.label) { chip in
                                 Button {
-                                    appState.executeJarvisVoiceCommand(chip.phrase)
+                                    appState.executeClearVoiceCommand(chip.phrase)
                                 } label: {
                                     HStack(spacing: 5) {
                                         Image(systemName: chip.icon)

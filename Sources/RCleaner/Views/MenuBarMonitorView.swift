@@ -46,25 +46,25 @@ public struct MenuBarMonitorView: View {
                 .buttonStyle(.plain)
                 .help("Thermal Pressure: \(thermal.state.rawValue) — \(thermal.state.descriptionText)")
 
-                // Jarvis Smart Alerts Config / Active Bell
+                // Clear Smart Alerts Config / Active Bell
                 Button {
                     expandedCard = (expandedCard == .alerts) ? nil : .alerts
                 } label: {
                     HStack(spacing: 3) {
-                        Image(systemName: appState.settings.enableJarvisSmartAlerts ? "bell.badge.fill" : "bell.slash")
+                        Image(systemName: appState.settings.enableClearSmartAlerts ? "bell.badge.fill" : "bell.slash")
                             .font(.system(size: 10.5, weight: .semibold))
                         if !appState.activeSmartAlerts.isEmpty {
                             Text("\(appState.activeSmartAlerts.count)")
                                 .font(.system(size: 9.5, weight: .bold))
                         }
                     }
-                    .foregroundStyle(!appState.activeSmartAlerts.isEmpty ? Color(hex: "FF5E57") : (appState.settings.enableJarvisSmartAlerts ? Color(hex: "36E2F8") : .secondary))
+                    .foregroundStyle(!appState.activeSmartAlerts.isEmpty ? Color(hex: "FF5E57") : (appState.settings.enableClearSmartAlerts ? Color(hex: "36E2F8") : .secondary))
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(Capsule().fill((!appState.activeSmartAlerts.isEmpty ? Color(hex: "FF5E57") : Color.secondary).opacity(0.16)))
                 }
                 .buttonStyle(.plain)
-                .help("Configure Jarvis Smart Alerts thresholds")
+                .help("Configure Clear Smart Alerts thresholds")
 
                 Text("\(appState.healthScore)%")
                     .font(.system(size: 10.5, weight: .bold))
@@ -132,7 +132,7 @@ public struct MenuBarMonitorView: View {
     private var overviewGrid: some View {
         let t = appState.telemetry
         return VStack(spacing: 10) {
-            // Active Jarvis Smart Alerts Strip (only visible when a configured threshold trips)
+            // Active Clear Smart Alerts Strip (only visible when a configured threshold trips)
             if !appState.activeSmartAlerts.isEmpty {
                 VStack(spacing: 6) {
                     ForEach(appState.activeSmartAlerts) { alert in
@@ -624,15 +624,15 @@ public struct MenuBarMonitorView: View {
                 }
 
             case .alerts:
-                Text("Jarvis Smart Alerts").font(.headline)
-                Text("Configure exact thresholds for live HUD & Jarvis voice alerts.")
+                Text("Clear Smart Alerts").font(.headline)
+                Text("Configure exact thresholds for live HUD & Clear voice alerts.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle("Enable Jarvis Smart Alerts", isOn: $appState.settings.enableJarvisSmartAlerts)
+                Toggle("Enable Clear Smart Alerts", isOn: $appState.settings.enableClearSmartAlerts)
                     .font(.callout.bold())
 
-                if appState.settings.enableJarvisSmartAlerts {
+                if appState.settings.enableClearSmartAlerts {
                     Divider()
                     Stepper("Low Disk: < \(appState.settings.warnLowDiskSpaceGB) GB", value: $appState.settings.warnLowDiskSpaceGB, in: 1...100, step: 1)
                         .font(.caption)

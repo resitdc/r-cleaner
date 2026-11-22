@@ -2,7 +2,7 @@ import Foundation
 import AVFoundation
 import Speech
 
-// MARK: - Parsed Jarvis Voice Command Intents
+// MARK: - Parsed Clear Voice Command Intents
 
 public enum VoiceCommandIntent: Equatable, Sendable {
     case runSmartCare
@@ -96,15 +96,23 @@ public enum VoiceCommandParser {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
 
-        // Strip common wake prefixes ("hey jarvis", "jarvis", "okay jarvis", "r-cleaner")
-        let prefixes = [
-            "hey jarvis,", "hey jarvis", "ok jarvis,", "ok jarvis",
-            "okay jarvis,", "okay jarvis", "jarvis,", "jarvis",
+        // Strip common wake prefixes ("hey clear", "ok clear", "clear,", "r-cleaner")
+        // while preserving "clear <noun>" when "clear" is used as an action verb (e.g. "clear memory", "clear trash").
+        let wakePrefixes = [
+            "hey clear,", "hey clear", "ok clear,", "ok clear",
+            "okay clear,", "okay clear", "clear,",
             "hey r-cleaner", "r-cleaner", "r cleaner", "please"
         ]
-        for p in prefixes {
+        for p in wakePrefixes {
             if text.hasPrefix(p) {
                 text = String(text.dropFirst(p.count)).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        let nonNounFollowers = ["run ", "scan ", "open ", "what", "free ", "flush ", "empty ", "check ", "activate ", "give ", "stop", "mute", "unmute", "launch "]
+        if text.hasPrefix("clear ") {
+            let afterClear = String(text.dropFirst(6)).trimmingCharacters(in: .whitespaces)
+            if nonNounFollowers.contains(where: { afterClear.hasPrefix($0) }) {
+                text = afterClear
             }
         }
         // Strip leading punctuation left behind by dictation
@@ -240,7 +248,7 @@ public enum VoiceCommandParser {
 // MARK: - Live On-Device Speech Recognition Service
 
 /// Privacy-first, on-device macOS Speech Recognition engine (`SFSpeechRecognizer` + `AVAudioEngine`)
-/// with live RMS audio metering and silence auto-execution for Two-Way Jarvis Voice Commands.
+/// with live RMS audio metering and silence auto-execution for Two-Way Clear Voice Commands.
 @MainActor
 public final class VoiceCommandService: ObservableObject {
     @Published public private(set) var isListening: Bool = false
@@ -385,7 +393,7 @@ public final class VoiceCommandService: ObservableObject {
             request.requiresOnDeviceRecognition = true
         }
         request.contextualStrings = [
-            "Jarvis", "Smart Care", "Space Lens", "Dev and AI Sweeper",
+            "Clear", "Hey Clear", "Smart Care", "Space Lens", "Dev and AI Sweeper",
             "Free up RAM", "Flush DNS", "Empty Trash", "Screen Cleaning Mode",
             "node modules", "Docker", "System Briefing", "Check for updates"
         ]

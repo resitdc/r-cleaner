@@ -26,7 +26,7 @@ public final class AppState: ObservableObject {
     @Published public var showAssistantPopover: Bool = false
     @Published public var showSettingsWindow: Bool = false
     @Published public var showUpdateSheet: Bool = false
-    @Published public var showJarvisCommandDeck: Bool = false
+    @Published public var showClearCommandDeck: Bool = false
     @Published public var isScreenCleaningActive: Bool = false
     @Published public var statusBannerMessage: String? = nil
 
@@ -57,8 +57,8 @@ public final class AppState: ObservableObject {
     @Published public var healthScore: Int = 92
     @Published public var healthRating: MacHealthRating = .excellent
     @Published public var recommendations: [AssistantRecommendation] = []
-    @Published public var activeSmartAlerts: [JarvisSmartAlert] = []
-    private let smartGuard = JarvisSmartGuardEvaluator()
+    @Published public var activeSmartAlerts: [ClearSmartAlert] = []
+    private let smartGuard = ClearSmartGuardEvaluator()
     private var dismissedAlertIDs: Set<String> = []
 
     // Smart Care State
@@ -349,7 +349,7 @@ public final class AppState: ObservableObject {
         }
     }
 
-    public func dismissSmartAlert(_ alert: JarvisSmartAlert) {
+    public func dismissSmartAlert(_ alert: ClearSmartAlert) {
         dismissedAlertIDs.insert(alert.id)
         activeSmartAlerts.removeAll { $0.id == alert.id }
     }
@@ -400,7 +400,7 @@ public final class AppState: ObservableObject {
         }
     }
 
-    // MARK: - Built-in Jarvis Voice AI Helpers
+    // MARK: - Built-in Clear Voice AI Helpers
 
     public func speak(_ line: String, interrupt: Bool = true) {
         voiceService.speak(line, settings: settings, interrupt: interrupt)
@@ -434,7 +434,7 @@ public final class AppState: ObservableObject {
         voiceService.playCueSequence(cues, settings: settings, fallbackText: fallbackLine)
     }
 
-    public func testBundledJarvisVoice() {
+    public func testBundledClearVoice() {
         playVoiceCue(.voiceTest)
     }
 
@@ -449,34 +449,34 @@ public final class AppState: ObservableObject {
         }
     }
 
-    // MARK: - Two-Way Jarvis Voice Commands
+    // MARK: - Two-Way Clear Voice Commands
 
-    public func openJarvisCommandDeck(startListening: Bool = true) {
+    public func openClearCommandDeck(startListening: Bool = true) {
         if showIntroFlow {
             completeIntro(startSmartCare: false)
         }
         voiceCommandService.lastResultCard = nil
         withAnimation(.spring(response: 0.30, dampingFraction: 0.84)) {
-            showJarvisCommandDeck = true
+            showClearCommandDeck = true
         }
         if startListening {
-            startJarvisListening()
+            startClearListening()
         }
     }
 
-    public func startJarvisListening() {
-        // Silence outgoing Jarvis speech so the microphone never hears Jarvis himself
+    public func startClearListening() {
+        // Silence outgoing Clear speech so the microphone never hears Clear himself
         voiceService.stop()
         voiceCommandService.lastResultCard = nil
         voiceCommandService.startListening { [weak self] transcript in
-            self?.executeJarvisVoiceCommand(transcript)
+            self?.executeClearVoiceCommand(transcript)
         }
     }
 
-    public func dismissJarvisCommandDeck() {
+    public func dismissClearCommandDeck() {
         voiceCommandService.stopListening(triggerCallback: false)
         withAnimation(.easeOut(duration: 0.20)) {
-            showJarvisCommandDeck = false
+            showClearCommandDeck = false
         }
     }
 
@@ -493,33 +493,33 @@ public final class AppState: ObservableObject {
         }
     }
 
-    public func executeJarvisVoiceCommand(_ rawText: String) {
+    public func executeClearVoiceCommand(_ rawText: String) {
         let intent = VoiceCommandParser.parse(rawText)
         voiceCommandService.stopListening(triggerCallback: false)
 
         switch intent {
         case .runSmartCare:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             selectedModule = .smartCare
             startSmartCareScan()
 
         case .runCleanup:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             selectedModule = .cleanup
             startCleanupScan()
 
         case .runProtection:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             selectedModule = .protection
             startProtectionScan()
 
         case .runDevAISweeper:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             selectedModule = .devAISweeper
             startDevAISweeperScan()
 
         case .scanSpaceLens(let hint):
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             selectedModule = .spaceLens
             let targetURL: URL
             switch hint {
@@ -541,24 +541,24 @@ public final class AppState: ObservableObject {
             playVoiceCue(.cleanupStart)
 
         case .freeUpRAM:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             quickFreeUpRAM()
 
         case .flushDNS:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             quickFlushDNS()
 
         case .emptyTrash:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             quickEmptyTrash()
             playVoiceCue(.cleanupComplete)
 
         case .screenCleaningMode:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             launchScreenCleaningMode()
 
         case .systemBriefing:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             speakSystemBriefing()
 
         case .topCPUConsumers:
@@ -611,25 +611,25 @@ public final class AppState: ObservableObject {
             }
 
         case .checkUpdates:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             checkForUpdates(userInitiated: true)
 
         case .openModule(let module):
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             selectedModule = module
             showBanner("Opened \(module.rawValue)")
 
         case .stopScan:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             stopCurrentTask()
             showBanner("Active scan stopped")
 
         case .muteVoice:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             if settings.enableVoiceAssistant { toggleVoiceAssistant() }
 
         case .unmuteVoice:
-            dismissJarvisCommandDeck()
+            dismissClearCommandDeck()
             if !settings.enableVoiceAssistant { toggleVoiceAssistant() }
 
         case .unknown(let raw):

@@ -9,7 +9,7 @@ public struct VoiceOption: Identifiable, Hashable {
 }
 
 /// Pre-rendered studio British male neural voice cues bundled directly inside R-Cleaner.app
-/// so users get a realistic Jarvis-inspired voice immediately with zero downloads.
+/// so users get a realistic Clear AI voice immediately with zero downloads.
 public enum VoiceCue: String, CaseIterable {
     case introMorning = "intro_morning"
     case introAfternoon = "intro_afternoon"
@@ -110,7 +110,7 @@ public enum VoiceCue: String, CaseIterable {
     }
 }
 
-/// Hybrid Jarvis-inspired Voice AI engine:
+/// Hybrid Clear Voice AI engine:
 /// 1. Plays bundled studio British male neural voice clips (`VoicePack/*.m4a`) routed through a
 ///    real-time `AVAudioEngine` HUD DSP chain (warm baritone EQ + subtle holographic room ambience +
 ///    procedural HUD chime) — zero downloads required.
@@ -214,13 +214,13 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
 
     // MARK: - Playback API
 
-    /// Plays a bundled studio Jarvis neural voice clip with HUD audio DSP, falling back to TTS
+    /// Plays a bundled studio Clear neural voice clip with HUD audio DSP, falling back to TTS
     /// if the user customized their address title or disabled the bundled voice pack.
     public func playCue(_ cue: VoiceCue, settings: RCleanerSettings, fallbackText: String? = nil, interrupt: Bool = true) {
         playCueSequence([cue], settings: settings, fallbackText: fallbackText, interrupt: interrupt)
     }
 
-    /// Plays a seamless sequence of bundled studio Jarvis voice clips (e.g., live telemetry briefing)
+    /// Plays a seamless sequence of bundled studio Clear voice clips (e.g., live telemetry briefing)
     /// so the voice stays 100% consistent across the entire app with zero voice switching.
     public func playCueSequence(_ cues: [VoiceCue], settings: RCleanerSettings, fallbackText: String? = nil, interrupt: Bool = true) {
         guard settings.enableVoiceAssistant, !cues.isEmpty else { return }
@@ -243,7 +243,7 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
         speak(fallback, settings: settings, interrupt: interrupt)
     }
 
-    /// Selects the exact real-time studio Jarvis briefing segments matching current Mac telemetry.
+    /// Selects the exact real-time studio Clear briefing segments matching current Mac telemetry.
     public static func briefingCues(
         telemetry: SystemTelemetrySnapshot,
         healthScore: Int,

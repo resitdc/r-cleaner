@@ -45,8 +45,8 @@ public struct MainWindowView: View {
                     }
                 }
                 .overlay {
-                    if appState.showJarvisCommandDeck {
-                        JarvisCommandOverlay(commandService: appState.voiceCommandService)
+                    if appState.showClearCommandDeck {
+                        ClearCommandOverlay(commandService: appState.voiceCommandService)
                             .environmentObject(appState)
                             .transition(.opacity.combined(with: .scale(scale: 0.96)))
                     }
@@ -292,7 +292,7 @@ public struct MainWindowView: View {
                 ) {
                     appState.speakSystemBriefing()
                 } onVoiceCommand: {
-                    appState.openJarvisCommandDeck(startListening: true)
+                    appState.openClearCommandDeck(startListening: true)
                 } onToggleMute: {
                     appState.toggleVoiceAssistant()
                 }
@@ -408,7 +408,7 @@ private struct SidebarRowView: View {
 }
 
 /// Frosted-glass Voice AI pill in the top-right bar, harmonized with the active module's palette.
-/// Includes one-click live System Briefing, two-way Jarvis Voice Command mic trigger (⌘⇧J), and mute toggle.
+/// Includes one-click live System Briefing, two-way Clear Voice Command mic trigger (⌘⇧J), and mute toggle.
 private struct VoiceHUDButton: View {
     @ObservedObject var voiceService: VoiceAssistantService
     @ObservedObject var commandService: VoiceCommandService
@@ -457,7 +457,7 @@ private struct VoiceHUDButton: View {
                     .padding(.vertical, 7)
             }
             .buttonStyle(.plain)
-            .help("Jarvis Voice Command (⌘⇧J) — Speak or type commands")
+            .help("Clear Voice Command (⌘⇧J) — Speak or type commands")
 
             Divider()
                 .frame(height: 12)

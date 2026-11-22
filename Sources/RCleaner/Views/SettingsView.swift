@@ -131,14 +131,14 @@ public struct SettingsView: View {
 
     private var voiceAITab: some View {
         Form {
-            Section("Built-in Jarvis Voice Core (Included — No Download Needed)") {
+            Section("Built-in Clear Voice Core (Included — No Download Needed)") {
                 Toggle("Enable Voice AI Assistant", isOn: $appState.settings.enableVoiceAssistant)
-                Toggle("Use Bundled Neural Jarvis Voice Pack (\(VoiceAssistantService.bundledClipCount) studio clips included)", isOn: $appState.settings.useBundledVoicePack)
+                Toggle("Use Bundled Neural Clear Voice Pack (\(VoiceAssistantService.bundledClipCount) studio clips included)", isOn: $appState.settings.useBundledVoicePack)
                 Toggle("Enable Futuristic HUD Audio Processing & Chime", isOn: $appState.settings.enableVoiceHudEffects)
 
                 HStack {
-                    Button("Test Built-in Jarvis Voice") {
-                        appState.testBundledJarvisVoice()
+                    Button("Test Built-in Clear Voice") {
+                        appState.testBundledClearVoice()
                     }
                     .buttonStyle(.borderedProminent)
 
@@ -153,7 +153,7 @@ public struct SettingsView: View {
                 }
             }
 
-            Section("Two-Way Jarvis Voice Commands (On-Device Speech Recognition)") {
+            Section("Two-Way Clear Voice Commands (On-Device Speech Recognition)") {
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Hands-Free Command Deck (⌘⇧J)")
@@ -165,7 +165,7 @@ public struct SettingsView: View {
                     Spacer()
                     Button("Open Command Bar") {
                         dismiss()
-                        appState.openJarvisCommandDeck(startListening: true)
+                        appState.openClearCommandDeck(startListening: true)
                     }
                     .buttonStyle(.borderedProminent)
                 }
@@ -332,33 +332,33 @@ public struct SettingsView: View {
                 Toggle("Remind to wipe your Mac screen (Every 2 weeks)", isOn: $appState.settings.remindScreenCleaning)
             }
 
-            Section("Jarvis Smart Alerts & Configurable Thresholds") {
-                Toggle("Enable Jarvis Smart Alerts (HUD + Voice AI)", isOn: $appState.settings.enableJarvisSmartAlerts)
+            Section("Clear Smart Alerts & Configurable Thresholds") {
+                Toggle("Enable Clear Smart Alerts (HUD + Voice AI)", isOn: $appState.settings.enableClearSmartAlerts)
 
                 Stepper("Low disk space alert below \(appState.settings.warnLowDiskSpaceGB) GB", value: $appState.settings.warnLowDiskSpaceGB, in: 1...100, step: 1)
-                    .disabled(!appState.settings.enableJarvisSmartAlerts)
+                    .disabled(!appState.settings.enableClearSmartAlerts)
 
                 Toggle("Alert when RAM pressure exceeds threshold", isOn: $appState.settings.notifyLowRAM)
-                    .disabled(!appState.settings.enableJarvisSmartAlerts)
+                    .disabled(!appState.settings.enableClearSmartAlerts)
                 if appState.settings.notifyLowRAM {
                     Stepper("RAM pressure threshold: \(appState.settings.ramAlertThresholdPercent)%", value: $appState.settings.ramAlertThresholdPercent, in: 60...98, step: 5)
-                        .disabled(!appState.settings.enableJarvisSmartAlerts)
+                        .disabled(!appState.settings.enableClearSmartAlerts)
                 }
 
                 Toggle("Alert when a runaway process pegs CPU", isOn: $appState.settings.notifyRunawayCPU)
-                    .disabled(!appState.settings.enableJarvisSmartAlerts)
+                    .disabled(!appState.settings.enableClearSmartAlerts)
                 if appState.settings.notifyRunawayCPU {
                     Stepper("Runaway CPU threshold: ≥ \(appState.settings.runawayCPUThresholdPercent)%", value: $appState.settings.runawayCPUThresholdPercent, in: 50...300, step: 10)
-                        .disabled(!appState.settings.enableJarvisSmartAlerts)
+                        .disabled(!appState.settings.enableClearSmartAlerts)
                     Stepper("Sustained duration before alert: \(appState.settings.runawayCPUDurationSeconds) sec", value: $appState.settings.runawayCPUDurationSeconds, in: 15...300, step: 15)
-                        .disabled(!appState.settings.enableJarvisSmartAlerts)
+                        .disabled(!appState.settings.enableClearSmartAlerts)
                 }
 
                 Toggle("Alert on Serious / Critical thermal throttling", isOn: $appState.settings.notifyThermalPressure)
-                    .disabled(!appState.settings.enableJarvisSmartAlerts)
+                    .disabled(!appState.settings.enableClearSmartAlerts)
 
                 Stepper("Minimum cooldown between repeated alerts: \(appState.settings.smartAlertCooldownMinutes) min", value: $appState.settings.smartAlertCooldownMinutes, in: 1...60, step: 1)
-                    .disabled(!appState.settings.enableJarvisSmartAlerts)
+                    .disabled(!appState.settings.enableClearSmartAlerts)
             }
 
             Section("Additional System Notifications") {

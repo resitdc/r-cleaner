@@ -464,11 +464,11 @@ public final class SystemTelemetryService {
     }
 }
 
-// MARK: - Configurable Jarvis Smart Guard Evaluator
+// MARK: - Configurable Clear Smart Guard Evaluator
 
 /// Stateful, pure evaluator that tracks runaway CPU durations and alert cooldowns
 /// against user-configurable thresholds for Disk, RAM Pressure, Runaway CPU, and Thermal State.
-public final class JarvisSmartGuardEvaluator {
+public final class ClearSmartGuardEvaluator {
     private var runawayStartByPID: [Int32: Date] = [:]
     private var lastAlertTimeByKind: [SmartAlertKind: Date] = [:]
 
@@ -478,17 +478,17 @@ public final class JarvisSmartGuardEvaluator {
         snapshot: SystemTelemetrySnapshot,
         settings: RCleanerSettings,
         now: Date = Date()
-    ) -> (activeAlerts: [JarvisSmartAlert], newlyTriggered: [JarvisSmartAlert]) {
-        guard settings.enableJarvisSmartAlerts else {
+    ) -> (activeAlerts: [ClearSmartAlert], newlyTriggered: [ClearSmartAlert]) {
+        guard settings.enableClearSmartAlerts else {
             runawayStartByPID.removeAll()
             return ([], [])
         }
 
         let cooldownSeconds = TimeInterval(max(1, settings.smartAlertCooldownMinutes) * 60)
-        var active: [JarvisSmartAlert] = []
-        var newlyTriggered: [JarvisSmartAlert] = []
+        var active: [ClearSmartAlert] = []
+        var newlyTriggered: [ClearSmartAlert] = []
 
-        func record(_ alert: JarvisSmartAlert) {
+        func record(_ alert: ClearSmartAlert) {
             active.append(alert)
             if let last = lastAlertTimeByKind[alert.kind], now.timeIntervalSince(last) < cooldownSeconds {
                 return
@@ -502,7 +502,7 @@ public final class JarvisSmartGuardEvaluator {
             let thresholdBytes = Int64(max(1, settings.warnLowDiskSpaceGB)) * 1_000_000_000
             if snapshot.storage.availableBytes < thresholdBytes {
                 let freeGB = Double(snapshot.storage.availableBytes) / 1_000_000_000.0
-                record(JarvisSmartAlert(
+                record(ClearSmartAlert(
                     kind: .lowDisk,
                     title: "Low Disk Space",
                     message: String(format: "Only %.1f GB free (below your %d GB alert threshold).", freeGB, settings.warnLowDiskSpaceGB),
@@ -517,7 +517,7 @@ public final class JarvisSmartGuardEvaluator {
         if settings.notifyLowRAM, snapshot.memory.totalBytes > 0 {
             let ramThreshold = Double(max(50, min(99, settings.ramAlertThresholdPercent)))
             if snapshot.memory.pressurePercent >= ramThreshold {
-                record(JarvisSmartAlert(
+                record(ClearSmartAlert(
                     kind: .criticalRAM,
                     title: "High Memory Pressure (\(Int(snapshot.memory.pressurePercent))%)",
                     message: "Memory load exceeded your \(settings.ramAlertThresholdPercent)% threshold. Freeing RAM is recommended.",
@@ -542,7 +542,7 @@ public final class JarvisSmartGuardEvaluator {
                 }
                 let elapsed = now.timeIntervalSince(start)
                 if elapsed >= requiredSeconds {
-                    record(JarvisSmartAlert(
+                    record(ClearSmartAlert(
                         kind: .runawayCPU,
                         title: "Runaway Process: \(proc.name)",
                         message: String(format: "%@ has pegged %.0f%% CPU for %ds (limit: %d%% for %ds).", proc.name, proc.cpuPercent, Int(elapsed), settings.runawayCPUThresholdPercent, settings.runawayCPUDurationSeconds),
@@ -563,7 +563,7 @@ public final class JarvisSmartGuardEvaluator {
 
         // 4. Thermal Pressure Guard (Serious / Critical)
         if settings.notifyThermalPressure, (snapshot.thermal.state == .serious || snapshot.thermal.state == .critical) {
-            record(JarvisSmartAlert(
+            record(ClearSmartAlert(
                 kind: .thermalPressure,
                 title: "Thermal Pressure: \(snapshot.thermal.state.rawValue)",
                 message: snapshot.thermal.state.descriptionText,

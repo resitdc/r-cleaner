@@ -3,7 +3,7 @@
 # R-Cleaner
 
 **Native macOS System Care, Cleanup, Protection, Performance & Storage Intelligence Suite**  
-*Built with SwiftUI + AppKit by `resitdc` — featuring a bundled Jarvis-inspired offline Voice AI*
+*Built with SwiftUI + AppKit by `resitdc` — featuring a bundled Clear offline Voice AI*
 
 <p>
   <strong>🇺🇸 English</strong> &nbsp;|&nbsp; <a href="README.id.md">🇮🇩 Bahasa Indonesia</a>
@@ -75,7 +75,7 @@ For complete scanning capabilities, you can grant permissions from **Settings �
 ### 3. Built-in Voice AI System (Zero Download Required)
 - R-Cleaner ships with an embedded offline studio British male neural voice pack (`27` clips) and real-time `AVAudioEngine` HUD audio processing—no extra voice downloads needed.
 - **Live Spoken System Briefing:** Click the **Voice AI** pill in the top-right corner of the window to hear an instant spoken briefing covering your live Mac health score, available storage, CPU/RAM load, and security status. Click again while speaking to stop.
-- **Two-Way Jarvis Voice Commands (`⌘⇧J`):** Click the **Microphone** icon inside the top-right Voice AI pill (or press **`⌘⇧J`**) to open the holographic Jarvis Command Deck powered by offline on-device macOS Speech Recognition. Speak or type commands like *"Run Smart Care"*, *"Dev & AI Sweeper"*, *"Free up RAM"*, *"Flush DNS"*, *"Scan Space Lens on working directory"*, or *"What's eating my CPU?"*.
+- **Two-Way Clear Voice Commands (`⌘⇧J`):** Click the **Microphone** icon inside the top-right Voice AI pill (or press **`⌘⇧J`**) to open the holographic Clear Command Deck powered by offline on-device macOS Speech Recognition. Speak or type commands like *"Run Smart Care"*, *"Dev & AI Sweeper"*, *"Free up RAM"*, *"Flush DNS"*, *"Scan Space Lens on working directory"*, or *"What's eating my CPU?"*.
 - **Quick Mute:** Click the speaker icon on the right side of the **Voice AI** pill to mute or unmute voice announcements anytime.
 - **Customize:** Open **Settings → Voice AI** to toggle the bundled voice pack, toggle HUD audio processing & chimes, test the voice, or customize live TTS cadence and address title.
 

@@ -136,11 +136,11 @@ public struct RCleanerSettings: Codable, Equatable {
     public var enableMenuRecommendations: Bool = true
     public var autoCleanExternalDrivesOnEject: Bool = false
 
-    // Notifications & Jarvis Smart Alerts (All Thresholds User-Configurable)
+    // Notifications & Clear Smart Alerts (All Thresholds User-Configurable)
     public var remindSmartCare: Bool = true
     public var smartCareReminderFrequency: ReminderFrequency = .weekly
     public var remindScreenCleaning: Bool = false
-    public var enableJarvisSmartAlerts: Bool = true
+    public var enableClearSmartAlerts: Bool = true
     public var warnLowDiskSpaceGB: Int = 8
     public var notifyTrashExceedsGB: Int = 2
     public var notifyLowRAM: Bool = true
@@ -220,7 +220,7 @@ public struct RCleanerSettings: Codable, Equatable {
         remindSmartCare = (try? c.decodeIfPresent(Bool.self, forKey: .remindSmartCare)) ?? d.remindSmartCare
         smartCareReminderFrequency = (try? c.decodeIfPresent(ReminderFrequency.self, forKey: .smartCareReminderFrequency)) ?? d.smartCareReminderFrequency
         remindScreenCleaning = (try? c.decodeIfPresent(Bool.self, forKey: .remindScreenCleaning)) ?? d.remindScreenCleaning
-        enableJarvisSmartAlerts = (try? c.decodeIfPresent(Bool.self, forKey: .enableJarvisSmartAlerts)) ?? d.enableJarvisSmartAlerts
+        enableClearSmartAlerts = (try? c.decodeIfPresent(Bool.self, forKey: .enableClearSmartAlerts)) ?? d.enableClearSmartAlerts
         warnLowDiskSpaceGB = (try? c.decodeIfPresent(Int.self, forKey: .warnLowDiskSpaceGB)) ?? d.warnLowDiskSpaceGB
         notifyTrashExceedsGB = (try? c.decodeIfPresent(Int.self, forKey: .notifyTrashExceedsGB)) ?? d.notifyTrashExceedsGB
         notifyLowRAM = (try? c.decodeIfPresent(Bool.self, forKey: .notifyLowRAM)) ?? d.notifyLowRAM

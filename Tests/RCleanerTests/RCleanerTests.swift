@@ -277,13 +277,14 @@ final class RCleanerTests: XCTestCase {
         XCTAssertTrue(release.supportsInPlaceInstall)
     }
 
-    func testJarvisVoiceCommandIntentParsing() {
-        XCTAssertEqual(VoiceCommandParser.parse("Hey Jarvis, run Smart Care"), .runSmartCare)
-        XCTAssertEqual(VoiceCommandParser.parse("Jarvis free up RAM"), .freeUpRAM)
+    func testClearVoiceCommandIntentParsing() {
+        XCTAssertEqual(VoiceCommandParser.parse("Hey Clear, run Smart Care"), .runSmartCare)
+        XCTAssertEqual(VoiceCommandParser.parse("Clear free up RAM"), .freeUpRAM)
+        XCTAssertEqual(VoiceCommandParser.parse("Clear memory"), .freeUpRAM)
         XCTAssertEqual(VoiceCommandParser.parse("Flush DNS cache"), .flushDNS)
         XCTAssertEqual(VoiceCommandParser.parse("What's eating my CPU?"), .topCPUConsumers)
         XCTAssertEqual(VoiceCommandParser.parse("What is using my memory"), .topMemoryConsumers)
-        XCTAssertEqual(VoiceCommandParser.parse("Hey Jarvis, scan Space Lens on working directory"), .scanSpaceLens(folderHint: "working-directory"))
+        XCTAssertEqual(VoiceCommandParser.parse("Hey Clear, scan Space Lens on working directory"), .scanSpaceLens(folderHint: "working-directory"))
         XCTAssertEqual(VoiceCommandParser.parse("Scan Space Lens on Downloads"), .scanSpaceLens(folderHint: "Downloads"))
         XCTAssertEqual(VoiceCommandParser.parse("Clean node modules and Docker"), .runDevAISweeper)
         XCTAssertEqual(VoiceCommandParser.parse("Activate screen cleaning mode"), .screenCleaningMode)
@@ -315,10 +316,10 @@ final class RCleanerTests: XCTestCase {
         XCTAssertEqual(parsed[1].inBytes, 1_048_576)
         XCTAssertEqual(parsed[1].outBytes, 262_144)
 
-        // 2. Verify configurable Jarvis Smart Guard thresholds & runaway CPU sustained duration
-        let evaluator = JarvisSmartGuardEvaluator()
+        // 2. Verify configurable Clear Smart Guard thresholds & runaway CPU sustained duration
+        let evaluator = ClearSmartGuardEvaluator()
         var settings = RCleanerSettings()
-        settings.enableJarvisSmartAlerts = true
+        settings.enableClearSmartAlerts = true
         settings.warnLowDiskSpaceGB = 8
         settings.ramAlertThresholdPercent = 85
         settings.runawayCPUThresholdPercent = 90
@@ -470,7 +471,7 @@ final class RCleanerTests: XCTestCase {
         let stressedCues = VoiceAssistantService.briefingCues(telemetry: stressedSnap, healthScore: 42, threatsCount: 2)
         XCTAssertEqual(stressedCues, [.briefingHealthAttention, .briefingStorageLow, .briefingPerfHeavy, .briefingOutroThreats])
 
-        // Verify all 27 bundled Jarvis neural voice clips are included inside the app bundle
+        // Verify all 27 bundled Clear neural voice clips are included inside the app bundle
         XCTAssertEqual(VoiceAssistantService.bundledClipCount, VoiceCue.allCases.count)
         for cue in VoiceCue.allCases {
             XCTAssertNotNil(VoiceAssistantService.bundledClipURL(for: cue), "Missing bundled voice clip: \(cue.rawValue).m4a")
