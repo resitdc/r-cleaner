@@ -95,15 +95,6 @@ public enum RCleanerTheme {
                 backgroundMid: Color(hex: "112548"),
                 backgroundBottom: Color(hex: "060E1B")
             )
-        case .cloudCleanup:
-            return ModulePalette(
-                primary: Color(hex: "38BDF8"),
-                secondary: Color(hex: "818CF8"),
-                accent: Color(hex: "BAE6FD"),
-                backgroundTop: Color(hex: "0D1E30"),
-                backgroundMid: Color(hex: "162E4A"),
-                backgroundBottom: Color(hex: "081320")
-            )
         case .emailCleanup:
             return ModulePalette(
                 primary: Color(hex: "F472B6"),

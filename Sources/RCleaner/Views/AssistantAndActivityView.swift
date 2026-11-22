@@ -159,30 +159,7 @@ public struct MyActivityDashboardView: View {
                         }
                     }
 
-                    // 2. Cloud Cleaned
-                    GlassCard(padding: 20, cornerRadius: 20) {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Label("Cloud Cleaned", systemImage: "icloud.fill")
-                                .font(.system(size: 14, weight: .bold))
-                                .foregroundStyle(.white)
-
-                            Text(ByteFormat.string(stats.totalCloudCleanedBytes))
-                                .font(.system(size: 34, weight: .heavy, design: .rounded))
-                                .foregroundStyle(.white)
-
-                            Text(stats.totalCloudCleanedBytes == 0
-                                 ? "Start cleaning or unsyncing cloud files to count freed gigabytes."
-                                 : "Total space reclaimed across iCloud Drive, Google Drive, OneDrive, and Dropbox.")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.white.opacity(0.68))
-
-                            Spacer(minLength: 4)
-                            Button("Go to Cloud Cleanup") { appState.selectedModule = .cloudCleanup }
-                                .font(.caption.bold()).foregroundStyle(palette.accent).buttonStyle(.plain)
-                        }
-                    }
-
-                    // 3. Scanned for Malware
+                    // 2. Scanned for Malware
                     GlassCard(padding: 20, cornerRadius: 20) {
                         VStack(alignment: .leading, spacing: 12) {
                             Label("Scanned for Malware", systemImage: "shield.lefthalf.filled.badge.checkmark")

@@ -124,13 +124,6 @@ public final class AppState: ObservableObject {
     @Published public var portKillerSnapshot = PortKillerSnapshot()
     @Published public var isScanningPorts: Bool = false
 
-    // Cloud Cleanup State
-    @Published public var cloudAccounts: [CloudAccountStatus] = []
-    @Published public var cloudScanningProvider: CloudProviderKind? = nil
-    @Published public var cloudScanProgress: Double = 0
-    @Published public var cloudStatusText: String = ""
-    @Published public var cloudSummary: CleanupSummary? = nil
-
     // Email Cleanup State
     @Published public var emailStage: ModuleStage = .intro
     @Published public var emailMessages: [EmailMessageItem] = []
@@ -148,7 +141,7 @@ public final class AppState: ObservableObject {
     public var isAnyScanRunning: Bool {
         smartCareStage == .scanning || cleanupStage == .scanning || protectionStage == .scanning
             || performanceStage == .scanning || applicationsStage == .scanning || clutterStage == .scanning
-            || spaceLensStage == .scanning || devAISweeperStage == .scanning || emailStage == .scanning || cloudScanningProvider != nil
+            || spaceLensStage == .scanning || devAISweeperStage == .scanning || emailStage == .scanning
     }
 
     public init() {
@@ -159,15 +152,6 @@ public final class AppState: ObservableObject {
         self.showIntroFlow = !loadedSettings.hasCompletedIntro
         resetSmartCarePillars()
         startTelemetryTimer()
-
-        // Run initial cloud discovery & telemetry off the Main Thread so launch is instantaneous
-        let cloudSvc = cloudEmailService
-        Task.detached(priority: .utility) {
-            let discovered = cloudSvc.discoverCloudAccounts()
-            await MainActor.run {
-                self.cloudAccounts = discovered
-            }
-        }
         refreshTelemetry(includeHeavy: true)
 
         // Gentle background check for newer GitHub Releases after launch settles
@@ -990,7 +974,6 @@ public final class AppState: ObservableObject {
         if spaceLensStage == .scanning || spaceLensStage == .cleaning { spaceLensStage = .intro }
         if devAISweeperStage == .scanning || devAISweeperStage == .cleaning { devAISweeperStage = .intro }
         if emailStage == .scanning || emailStage == .cleaning { emailStage = .intro }
-        cloudScanningProvider = nil
     }
 
     // MARK: - Individual Module Scan & Clean Triggers
@@ -1323,26 +1306,6 @@ public final class AppState: ObservableObject {
                 self.stats.totalTimeSavedMinutes += max(2, count * 2)
                 self.refreshListeningPorts()
             }
-        }
-    }
-
-    public func scanCloudProvider(_ account: CloudAccountStatus) {
-        activeTask?.cancel()
-        cloudScanningProvider = account.provider
-        cloudScanProgress = 0.05
-        activeTask = Task {
-            let updated = await cloudEmailService.scanCloudAccount(account) { msg, pct in
-                Task { @MainActor in
-                    self.cloudStatusText = msg
-                    self.cloudScanProgress = pct
-                }
-            }
-            if Task.isCancelled { return }
-            if let idx = self.cloudAccounts.firstIndex(where: { $0.id == updated.id }) {
-                self.cloudAccounts[idx] = updated
-            }
-            self.cloudScanningProvider = nil
-            FileSystemHelpers.playCompletionSound(enabled: self.settings.playSounds)
         }
     }
 

@@ -228,9 +228,6 @@ public enum VoiceCommandParser {
         if text.contains("performance") || text.contains("maintenance") || text.contains("login item") {
             return .openModule(.performance)
         }
-        if text.contains("cloud") || text.contains("icloud") || text.contains("google drive") {
-            return .openModule(.cloudCleanup)
-        }
         if text.contains("email") || text.contains("mail") || text.contains("inbox") {
             return .openModule(.emailCleanup)
         }
