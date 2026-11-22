@@ -44,11 +44,16 @@ public final class CryoFreezerService: @unchecked Sendable {
         lock.lock()
         var currentPIDSet = Set<Int32>()
         var items: [CryoProcessItem] = []
-        items.reserveCapacity(min(80, rawRows.count))
+        items.reserveCapacity(min(60, rawRows.count))
+
+        let ignoredCLITools: Set<String> = ["ps", "lsof", "git", "sh", "zsh", "bash", "sed", "awk", "grep", "top", "nettop"]
 
         for row in rawRows {
             // Exclude R-Cleaner itself so its own transient scan thread isn't listed as a freeze target
             guard row.pid != selfPID else { continue }
+            let rawExecName = (row.executablePath as NSString).lastPathComponent
+            if ignoredCLITools.contains(rawExecName) { continue }
+
             currentPIDSet.insert(row.pid)
             let guiInfo = guiAppsByPID[row.pid]
             let isFrozen = row.stat.uppercased().hasPrefix("T") || sessionFrozenPIDs.contains(row.pid)
@@ -59,8 +64,11 @@ public final class CryoFreezerService: @unchecked Sendable {
             let isGUI = guiInfo != nil || row.executablePath.contains(".app/Contents/MacOS/")
             let memBytes = row.rssKB * 1024
 
-            // Keep processes that are either GUI apps, currently frozen, using >= 0.4% CPU, or >= 55 MB RAM
-            let isSignificant = isFrozen || isGUI || row.cpuPercent >= 0.4 || memBytes >= 55 * 1_048_576
+            // Keep processes that are currently frozen, GUI apps with >= 45 MB RAM, or processes using >= 2% CPU / >= 120 MB RAM
+            let isSignificant = isFrozen
+                || (isGUI && memBytes >= 45 * 1_048_576)
+                || row.cpuPercent >= 2.0
+                || memBytes >= 120 * 1_048_576
             guard isSignificant else { continue }
 
             // Skip root/system background daemons under /System/Library or /usr/libexec unless they are GUI apps
@@ -139,8 +147,20 @@ public final class CryoFreezerService: @unchecked Sendable {
             return scoreA > scoreB
         }
 
+        // Deduplicate repetitive Electron "Helper" worker clones so one app doesn't flood the grid with 6 identical cards
+        var deduplicated: [CryoProcessItem] = []
+        var seenHelperTitles = Set<String>()
+        for item in items {
+            if !item.isFrozen && item.displayTitle.contains("Helper") {
+                if !seenHelperTitles.insert(item.displayTitle).inserted {
+                    continue
+                }
+            }
+            deduplicated.append(item)
+        }
+
         malloc_zone_pressure_relief(nil, 0)
-        return CryoFreezerSnapshot(items: Array(items.prefix(36)), lastUpdated: Date())
+        return CryoFreezerSnapshot(items: Array(deduplicated.prefix(24)), lastUpdated: Date())
     }
 
     private static func thermalSortRank(_ state: CryoThermalState) -> Int {
