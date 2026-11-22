@@ -352,26 +352,35 @@ private struct SidebarRowView: View {
         let palette = RCleanerTheme.palette(for: module)
 
         Button(action: action) {
-            HStack(spacing: 11) {
+            HStack(spacing: 10) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 8, style: .continuous)
                         .fill(
                             isSelected
                                 ? LinearGradient(colors: [palette.primary, palette.secondary], startPoint: .topLeading, endPoint: .bottomTrailing)
-                                : LinearGradient(colors: [Color.white.opacity(0.10), Color.white.opacity(0.06)], startPoint: .top, endPoint: .bottom)
+                                : LinearGradient(colors: [palette.primary.opacity(0.18), palette.secondary.opacity(0.08)], startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(
+                                    isSelected ? Color.white.opacity(0.22) : palette.accent.opacity(0.22),
+                                    lineWidth: 0.8
+                                )
                         )
                         .frame(width: 28, height: 28)
 
                     Image(systemName: module.iconName)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(isSelected ? .white : palette.accent.opacity(0.9))
+                        .foregroundStyle(isSelected ? .white : palette.accent)
                 }
 
                 Text(module.rawValue)
                     .font(.system(size: 13, weight: isSelected ? .semibold : .medium))
-                    .foregroundStyle(isSelected ? .white : .white.opacity(0.78))
+                    .foregroundStyle(isSelected ? .white : .white.opacity(0.82))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.88)
 
-                Spacer()
+                Spacer(minLength: 4)
 
                 if let badge = module.badgeText {
                     Text(badge)
@@ -379,7 +388,16 @@ private struct SidebarRowView: View {
                         .foregroundStyle(.white)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
-                        .background(Capsule().fill(palette.primary.opacity(0.85)))
+                        .background(
+                            Capsule()
+                                .fill(
+                                    LinearGradient(
+                                        colors: [palette.primary.opacity(0.95), palette.secondary.opacity(0.85)],
+                                        startPoint: .leading,
+                                        endPoint: .trailing
+                                    )
+                                )
+                        )
                 }
             }
             .padding(.horizontal, 10)

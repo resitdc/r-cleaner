@@ -71,65 +71,65 @@ public enum RCleanerTheme {
         case .spaceLens:
             return ModulePalette(
                 primary: Color(hex: "00BBF9"),
-                secondary: Color(hex: "4361EE"),
-                accent: Color(hex: "72EFDD"),
+                secondary: Color(hex: "00F5D4"),
+                accent: Color(hex: "22D3EE"),
                 backgroundTop: Color(hex: "0A1D2E"),
                 backgroundMid: Color(hex: "102B44"),
                 backgroundBottom: Color(hex: "06111C")
             )
         case .devAISweeper:
             return ModulePalette(
-                primary: Color(hex: "00D2A0"),
-                secondary: Color(hex: "00A8E8"),
-                accent: Color(hex: "5EFCE8"),
-                backgroundTop: Color(hex: "071E22"),
-                backgroundMid: Color(hex: "0C2F35"),
-                backgroundBottom: Color(hex: "041114")
+                primary: Color(hex: "10B981"),
+                secondary: Color(hex: "84CC16"),
+                accent: Color(hex: "A3E635"),
+                backgroundTop: Color(hex: "081F1A"),
+                backgroundMid: Color(hex: "0D3128"),
+                backgroundBottom: Color(hex: "05120F")
             )
         case .portKiller:
             return ModulePalette(
-                primary: Color(hex: "38BDF8"),
-                secondary: Color(hex: "6366F1"),
-                accent: Color(hex: "00F5D4"),
-                backgroundTop: Color(hex: "09192F"),
-                backgroundMid: Color(hex: "112548"),
-                backgroundBottom: Color(hex: "060E1B")
+                primary: Color(hex: "F59E0B"),
+                secondary: Color(hex: "F97316"),
+                accent: Color(hex: "FBBF24"),
+                backgroundTop: Color(hex: "221509"),
+                backgroundMid: Color(hex: "331F0D"),
+                backgroundBottom: Color(hex: "130C05")
             )
         case .cryoFreezer:
             return ModulePalette(
                 primary: Color(hex: "38BDF8"),
-                secondary: Color(hex: "00F5D4"),
-                accent: Color(hex: "A5F3FC"),
+                secondary: Color(hex: "3B82F6"),
+                accent: Color(hex: "7DD3FC"),
                 backgroundTop: Color(hex: "07182B"),
                 backgroundMid: Color(hex: "0D2847"),
                 backgroundBottom: Color(hex: "040E1A")
             )
         case .emailCleanup:
             return ModulePalette(
-                primary: Color(hex: "F472B6"),
-                secondary: Color(hex: "A855F7"),
-                accent: Color(hex: "FBCFE8"),
+                primary: Color(hex: "EC4899"),
+                secondary: Color(hex: "F43F5E"),
+                accent: Color(hex: "F472B6"),
                 backgroundTop: Color(hex: "24112E"),
                 backgroundMid: Color(hex: "371742"),
                 backgroundBottom: Color(hex: "14091B")
             )
         case .myTools:
             return ModulePalette(
-                primary: Color(hex: "60A5FA"),
-                secondary: Color(hex: "34D399"),
-                accent: Color(hex: "A7F3D0"),
-                backgroundTop: Color(hex: "111D2B"),
-                backgroundMid: Color(hex: "172B3C"),
-                backgroundBottom: Color(hex: "0A121C")
+                primary: Color(hex: "8B5CF6"),
+                secondary: Color(hex: "6366F1"),
+                accent: Color(hex: "C084FC"),
+                backgroundTop: Color(hex: "17122E"),
+                backgroundMid: Color(hex: "231B44"),
+                backgroundBottom: Color(hex: "0D0A1B")
             )
         case .myActivity:
             return ModulePalette(
-                primary: Color(hex: "34D399"),
-                secondary: Color(hex: "38BDF8"),
-                accent: Color(hex: "A7F3D0"),
-                backgroundTop: Color(hex: "0E2226"),
-                backgroundMid: Color(hex: "133138"),
-                backgroundBottom: Color(hex: "071417")
+                primary: Color(hex: "FB7185"),
+                secondary: Color(hex: "F97316"),
+                accent: Color(hex: "FF8A65"),
+                backgroundTop: Color(hex: "251219"),
+                backgroundMid: Color(hex: "381A24"),
+                backgroundBottom: Color(hex: "150A0E")
             )
         }
     }
