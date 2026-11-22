@@ -159,21 +159,23 @@ public struct PortKillerView: View {
     // MARK: - 1. Clean Header + Summary Badges
 
     private func headerSection(snap: PortKillerSnapshot) -> some View {
-        HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 10) {
-                    Text("Port Killer")
-                        .font(.system(size: 28, weight: .bold, design: .rounded))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Text("Port Killer")
+                    .font(.system(size: 28, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
 
-                    if appState.isScanningPorts {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(palette.accent)
-                    }
+                if appState.isScanningPorts {
+                    ProgressView()
+                        .controlSize(.small)
+                        .tint(palette.accent)
                 }
 
+                Spacer(minLength: 360)
+            }
+
+            ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     summaryBadge(
                         icon: "circle.fill",
@@ -234,15 +236,15 @@ public struct PortKillerView: View {
                             Text("\(snap.lanExposedCount) on LAN")
                                 .font(.system(size: 11.5, weight: .medium))
                                 .foregroundStyle(.white.opacity(0.75))
+                                .lineLimit(1)
                         }
+                        .fixedSize(horizontal: true, vertical: false)
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                         .background(Capsule().fill(Color.white.opacity(0.05)))
                     }
                 }
             }
-
-            Spacer(minLength: 360)
         }
         .padding(.horizontal, 26)
         .padding(.top, 18)
@@ -579,7 +581,9 @@ public struct PortKillerView: View {
             Text(label)
                 .font(.system(size: 10, weight: .medium))
                 .foregroundStyle(.white.opacity(0.68))
+                .lineLimit(1)
         }
+        .fixedSize(horizontal: true, vertical: false)
     }
 
     // MARK: - 3B. Compact List View
@@ -713,7 +717,9 @@ public struct PortKillerView: View {
                 Text(label)
                     .font(.system(size: 11.5, weight: .semibold).monospacedDigit())
                     .foregroundStyle(.white.opacity(isActive ? 0.96 : 0.80))
+                    .lineLimit(1)
             }
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
             .background(
