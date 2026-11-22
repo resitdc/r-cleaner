@@ -72,7 +72,7 @@ public enum VoiceCue: String, CaseIterable {
         case .briefingNominal:
             return "All core subsystems are operating within nominal parameters sir."
         case .voiceTest:
-            return "At your service sir. R-Cleaner built-in neural voice core and HUD audio telemetry are fully operational."
+            return "At your service sir. Clear voice assistant is online and all R-Cleaner diagnostic systems are ready."
         case .briefingHealthExcellent:
             return "System briefing sir. Overall Mac health is excellent."
         case .briefingHealthGood:
@@ -124,8 +124,11 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
     private var audioEngine: AVAudioEngine?
     private var voicePlayerNode: AVAudioPlayerNode?
     private var chimePlayerNode: AVAudioPlayerNode?
+    private var timePitchUnit: AVAudioUnitTimePitch?
     private var eqUnit: AVAudioUnitEQ?
     private var reverbUnit: AVAudioUnitReverb?
+    private var fallbackQueueLinks: [URL] = []
+    private var fallbackAudioPlayer: AVAudioPlayer?
     private var playbackGeneration: Int = 0
 
     @Published public private(set) var isSpeaking: Bool = false
@@ -225,10 +228,7 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
     public func playCueSequence(_ cues: [VoiceCue], settings: RCleanerSettings, fallbackText: String? = nil, interrupt: Bool = true) {
         guard settings.enableVoiceAssistant, !cues.isEmpty else { return }
 
-        let normalizedAddress = settings.voiceAddressTitle.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let usesDefaultSir = normalizedAddress.isEmpty || normalizedAddress == "sir"
-
-        if settings.useBundledVoicePack, usesDefaultSir {
+        if settings.useBundledVoicePack {
             let urls = cues.compactMap { Self.bundledClipURL(for: $0) }
             if urls.count == cues.count {
                 let transcript = cues.map(\.transcript).joined(separator: " ")
@@ -293,7 +293,7 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
         }
 
         if settings.enableVoiceHudEffects {
-            playSubtleHUDChime()
+            playSubtleHUDChime(settings: settings)
         }
 
         let utterance = AVSpeechUtterance(string: cleaned)
@@ -316,24 +316,62 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
         }
         voicePlayerNode?.stop()
         chimePlayerNode?.stop()
+        fallbackAudioPlayer?.stop()
+        fallbackAudioPlayer = nil
+        fallbackQueueLinks.removeAll()
         isSpeaking = false
     }
 
     // MARK: - Real-Time AVAudioEngine HUD DSP Pipeline
 
-    private func ensureAudioEngine(hudEffectsEnabled: Bool) -> Bool {
+    private func applyVoiceTuning(settings: RCleanerSettings) {
+        let hudEffectsEnabled = settings.enableVoiceHudEffects
+        reverbUnit?.wetDryMix = hudEffectsEnabled ? 9.0 : 0.0
+        eqUnit?.bypass = !hudEffectsEnabled
+
+        // Default rate = 0.49 -> 1.0x studio speed; Default pitch = 0.92 -> 0 cents studio pitch.
+        let clampedRate = max(0.38, min(0.58, settings.voiceRate))
+        let clampedPitch = max(0.80, min(1.15, settings.voicePitch))
+        let relativeRate = Float(clampedRate / 0.49)
+        let relativeCents = Float((clampedPitch - 0.92) * 900.0)
+        timePitchUnit?.rate = abs(relativeRate - 1.0) < 0.025 ? 1.0 : relativeRate
+        timePitchUnit?.pitch = abs(relativeCents) < 15.0 ? 0.0 : relativeCents
+    }
+
+    private func teardownAudioEngine() {
+        voicePlayerNode?.stop()
+        chimePlayerNode?.stop()
+        if let engine = audioEngine, engine.isRunning {
+            engine.stop()
+        }
+        audioEngine = nil
+        voicePlayerNode = nil
+        chimePlayerNode = nil
+        timePitchUnit = nil
+        eqUnit = nil
+        reverbUnit = nil
+    }
+
+    private func ensureAudioEngine(settings: RCleanerSettings) -> Bool {
         if let engine = audioEngine {
-            reverbUnit?.wetDryMix = hudEffectsEnabled ? 9.0 : 0.0
-            eqUnit?.bypass = !hudEffectsEnabled
+            applyVoiceTuning(settings: settings)
             if !engine.isRunning {
-                try? engine.start()
+                do {
+                    try engine.start()
+                } catch {
+                    // Audio device or sample-rate changed (e.g. after mic session); rebuild graph cleanly
+                    teardownAudioEngine()
+                }
             }
-            return engine.isRunning
+            if let runningEngine = audioEngine, runningEngine.isRunning {
+                return true
+            }
         }
 
         let engine = AVAudioEngine()
         let vPlayer = AVAudioPlayerNode()
         let cPlayer = AVAudioPlayerNode()
+        let timePitch = AVAudioUnitTimePitch()
         let eq = AVAudioUnitEQ(numberOfBands: 3)
         let reverb = AVAudioUnitReverb()
 
@@ -355,29 +393,37 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
         eq.bands[2].bandwidth = 1.0
         eq.bands[2].gain = 1.8
         eq.bands[2].bypass = false
-        eq.bypass = !hudEffectsEnabled
+        eq.bypass = !settings.enableVoiceHudEffects
 
         reverb.loadFactoryPreset(.smallRoom)
-        reverb.wetDryMix = hudEffectsEnabled ? 9.0 : 0.0
+        reverb.wetDryMix = settings.enableVoiceHudEffects ? 9.0 : 0.0
 
         engine.attach(vPlayer)
         engine.attach(cPlayer)
+        engine.attach(timePitch)
         engine.attach(eq)
         engine.attach(reverb)
 
         let format = engine.mainMixerNode.outputFormat(forBus: 0)
-        engine.connect(vPlayer, to: eq, format: nil)
+        engine.connect(vPlayer, to: timePitch, format: nil)
+        engine.connect(timePitch, to: eq, format: nil)
         engine.connect(eq, to: reverb, format: nil)
         engine.connect(reverb, to: engine.mainMixerNode, format: nil)
-        engine.connect(cPlayer, to: engine.mainMixerNode, format: format)
+        if format.sampleRate > 0 && format.channelCount > 0 {
+            engine.connect(cPlayer, to: engine.mainMixerNode, format: format)
+        } else {
+            engine.connect(cPlayer, to: engine.mainMixerNode, format: nil)
+        }
 
         do {
             try engine.start()
             self.audioEngine = engine
             self.voicePlayerNode = vPlayer
             self.chimePlayerNode = cPlayer
+            self.timePitchUnit = timePitch
             self.eqUnit = eq
             self.reverbUnit = reverb
+            applyVoiceTuning(settings: settings)
             return true
         } catch {
             return false
@@ -389,20 +435,21 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
             stop()
         }
 
-        guard ensureAudioEngine(hudEffectsEnabled: settings.enableVoiceHudEffects),
-              let player = voicePlayerNode else {
-            speak(transcript, settings: settings, interrupt: interrupt)
-            return
-        }
-
         let files = urls.compactMap { try? AVAudioFile(forReading: $0) }
         guard files.count == urls.count, !files.isEmpty else {
             speak(transcript, settings: settings, interrupt: interrupt)
             return
         }
 
+        guard ensureAudioEngine(settings: settings),
+              let player = voicePlayerNode else {
+            // Direct AVAudioPlayer fallback so it still plays the bundled Clear neural voice clip
+            playDirectAudioFallback(urls: urls, transcript: transcript)
+            return
+        }
+
         if settings.enableVoiceHudEffects {
-            playSubtleHUDChime()
+            playSubtleHUDChime(settings: settings)
         }
 
         playbackGeneration += 1
@@ -427,9 +474,24 @@ public final class VoiceAssistantService: NSObject, ObservableObject, AVSpeechSy
         player.play()
     }
 
+    /// Fallback player that plays the exact bundled `.m4a` neural voice files directly if AVAudioEngine is busy.
+    private func playDirectAudioFallback(urls: [URL], transcript: String) {
+        guard let first = urls.first,
+              let directPlayer = try? AVAudioPlayer(contentsOf: first) else {
+            isSpeaking = false
+            return
+        }
+        playbackGeneration += 1
+        lastSpokenLine = transcript
+        isSpeaking = true
+        fallbackAudioPlayer = directPlayer
+        directPlayer.volume = 1.0
+        directPlayer.play()
+    }
+
     /// Procedurally generates a soft 75ms dual-harmonic cyan HUD chime (880 Hz + 1320 Hz).
-    private func playSubtleHUDChime() {
-        guard ensureAudioEngine(hudEffectsEnabled: true),
+    private func playSubtleHUDChime(settings: RCleanerSettings) {
+        guard ensureAudioEngine(settings: settings),
               let engine = audioEngine,
               let chimeNode = chimePlayerNode else { return }
 

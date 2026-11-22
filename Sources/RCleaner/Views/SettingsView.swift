@@ -171,15 +171,8 @@ public struct SettingsView: View {
                 }
             }
 
-            Section("Live Telemetry Speech (macOS Built-in TTS)") {
+            Section("Clear Neural Voice Tuning") {
                 TextField("Address me as (e.g., sir, boss, your name)", text: $appState.settings.voiceAddressTitle)
-
-                Picker("Dynamic Speech Voice", selection: $appState.settings.voiceIdentifier) {
-                    Text("Auto (Best British Male — Daniel en-GB)").tag("")
-                    ForEach(appState.voiceService.availableVoices) { v in
-                        Text("\(v.name) (\(v.language) • \(v.qualityLabel))").tag(v.id)
-                    }
-                }
 
                 VStack(alignment: .leading) {
                     HStack {
@@ -197,6 +190,21 @@ public struct SettingsView: View {
                         Text(String(format: "%.2f", appState.settings.voicePitch)).monospacedDigit().foregroundStyle(.secondary)
                     }
                     Slider(value: $appState.settings.voicePitch, in: 0.80...1.15)
+                }
+
+                HStack {
+                    Text("Studio default: Rate 0.49 • Pitch 0.92 (British Neural Voice)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Reset to Studio Default") {
+                        appState.settings.useBundledVoicePack = true
+                        appState.settings.voiceRate = 0.49
+                        appState.settings.voicePitch = 0.92
+                        appState.settings.voiceAddressTitle = "sir"
+                        appState.testBundledClearVoice()
+                    }
+                    .controlSize(.small)
                 }
             }
         }
