@@ -954,9 +954,9 @@ public struct ActivePortItem: Identifiable, Hashable, Sendable {
     public var isSelected: Bool
 
     public var localWebURL: URL? {
-        // Common HTTP/web server ports or dev servers
-        let webPorts: Set<Int> = [80, 443, 3000, 3001, 3002, 4000, 4173, 4200, 4321, 5000, 5173, 5174, 5175, 5500, 8000, 8080, 8081, 8787, 8888, 9000, 11434]
-        if category == .devWebServer || webPorts.contains(port) || (port >= 3000 && port <= 9999 && category != .databaseCache) {
+        // Show "Open in Browser" only for actual Web/Dev servers or known HTTP ports
+        let knownHTTPPorts: Set<Int> = [80, 3000, 3001, 3002, 4000, 4173, 4200, 4321, 5000, 5173, 5174, 5175, 5500, 8000, 8080, 8081, 8787, 8888, 9000]
+        if category == .devWebServer || (knownHTTPPorts.contains(port) && category != .databaseCache && category != .aiAndMobile) {
             return URL(string: "http://localhost:\(port)")
         }
         return nil
