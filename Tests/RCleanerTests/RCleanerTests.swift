@@ -362,6 +362,48 @@ final class RCleanerTests: XCTestCase {
         XCTAssertTrue(rCleared.activeAlerts.isEmpty)
     }
 
+    func testPortKillerLsofParsingAndClassification() {
+        let sampleLsof = """
+        COMMAND     PID    USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+        ControlCe   576 resitdc    8u  IPv4 0xf33b65b18e9e0559      0t0  TCP *:7000 (LISTEN)
+        ControlCe   576 resitdc    9u  IPv6 0x8861560ac6a3f81a      0t0  TCP *:7000 (LISTEN)
+        postgres    714 resitdc    7u  IPv6 0x511b88ed42624adc      0t0  TCP [::1]:5432 (LISTEN)
+        postgres    714 resitdc    8u  IPv4 0x027704f16ffa6004      0t0  TCP 127.0.0.1:5432 (LISTEN)
+        ollama      947 resitdc    4u  IPv6 0x1e2efa1b0de637df      0t0  TCP *:11434 (LISTEN)
+        node      47561 resitdc   33u  IPv6 0x91c993fcf70c6cab      0t0  TCP [::1]:5173 (LISTEN)
+        """
+        let sockets = PortKillerService.parseLsofListenTable(sampleLsof)
+        // Must deduplicate dual-stack IPv4 + IPv6 listeners on the same (PID, port)
+        XCTAssertEqual(sockets.count, 4)
+
+        let pg = sockets.first { $0.port == 5432 }
+        XCTAssertNotNil(pg)
+        XCTAssertEqual(pg?.pid, 714)
+        XCTAssertFalse(pg?.isExposedToLAN == true)
+
+        let ollama = sockets.first { $0.port == 11434 }
+        XCTAssertNotNil(ollama)
+        XCTAssertTrue(ollama?.isExposedToLAN == true)
+
+        let viteClass = PortKillerService.classifyPort(
+            port: 5173,
+            processName: "node",
+            fullArgs: "node /Users/demo/projects/posme/template/node_modules/.bin/vite",
+            cwd: "/Users/demo/projects/posme/template"
+        )
+        XCTAssertEqual(viteClass.category, .devWebServer)
+        XCTAssertTrue(viteClass.frameworkLabel.contains("Vite"))
+
+        let pgClass = PortKillerService.classifyPort(
+            port: 5432,
+            processName: "postgres",
+            fullArgs: "/opt/homebrew/opt/postgresql@18/bin/postgres",
+            cwd: "/opt/homebrew/var/postgresql@18"
+        )
+        XCTAssertEqual(pgClass.category, .databaseCache)
+        XCTAssertEqual(pgClass.frameworkLabel, "PostgreSQL")
+    }
+
     func testAssistantHealthScoring() {
         let assistant = AssistantService()
         var telemetry = SystemTelemetrySnapshot()

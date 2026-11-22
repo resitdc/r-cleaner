@@ -86,6 +86,15 @@ public enum RCleanerTheme {
                 backgroundMid: Color(hex: "0C2F35"),
                 backgroundBottom: Color(hex: "041114")
             )
+        case .portKiller:
+            return ModulePalette(
+                primary: Color(hex: "38BDF8"),
+                secondary: Color(hex: "6366F1"),
+                accent: Color(hex: "00F5D4"),
+                backgroundTop: Color(hex: "09192F"),
+                backgroundMid: Color(hex: "112548"),
+                backgroundBottom: Color(hex: "060E1B")
+            )
         case .cloudCleanup:
             return ModulePalette(
                 primary: Color(hex: "38BDF8"),

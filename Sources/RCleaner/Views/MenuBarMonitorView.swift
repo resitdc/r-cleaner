@@ -286,6 +286,7 @@ public struct MenuBarMonitorView: View {
                     onTap: {
                         expandedCard = .network
                         appState.refreshTelemetry(includeHeavy: true)
+                        appState.refreshListeningPorts(silent: true)
                     }
                 )
             }
@@ -577,6 +578,48 @@ public struct MenuBarMonitorView: View {
                             }
                         }
                         .padding(.vertical, 2)
+                    }
+                }
+
+                Divider()
+                HStack {
+                    Text("Active Local Ports").font(.caption.bold()).foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Open Port Killer") {
+                        appState.selectedModule = .portKiller
+                        openMainWindow()
+                    }
+                    .font(.caption2.bold())
+                    .buttonStyle(.link)
+                }
+                let devPorts = appState.portKillerSnapshot.items.filter { !$0.isSystemProtected }.prefix(5)
+                if devPorts.isEmpty {
+                    Text("No active dev ports detected.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(devPorts)) { portItem in
+                        HStack(spacing: 6) {
+                            Text(":\(String(portItem.port))")
+                                .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                                .foregroundStyle(Color(hex: "00F5D4"))
+                                .frame(width: 48, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 1) {
+                                Text(portItem.displayTitle)
+                                    .font(.caption.bold())
+                                    .lineLimit(1)
+                                Text(portItem.frameworkLabel)
+                                    .font(.system(size: 9.5))
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer()
+                            Button("Kill") {
+                                appState.killListeningPort(portItem, force: true)
+                            }
+                            .controlSize(.mini)
+                        }
+                        .padding(.vertical, 1)
                     }
                 }
 

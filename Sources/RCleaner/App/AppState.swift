@@ -13,6 +13,7 @@ public final class AppState: ObservableObject {
     public let clutterService = ClutterScannerService()
     public let spaceLensService = SpaceLensService()
     public let devAISweeperService = DevAISweeperService()
+    public let portKillerService = PortKillerService()
     public let cloudEmailService = CloudAndEmailService()
     public let assistantService = AssistantService()
     public let voiceService = VoiceAssistantService()
@@ -118,6 +119,10 @@ public final class AppState: ObservableObject {
     @Published public var devAISweeperStatusText: String = ""
     @Published public var devAISweeperProgress: Double = 0
     @Published public var devAISweeperSummary: CleanupSummary? = nil
+
+    // Active Port & Local Server Killer State
+    @Published public var portKillerSnapshot = PortKillerSnapshot()
+    @Published public var isScanningPorts: Bool = false
 
     // Cloud Cleanup State
     @Published public var cloudAccounts: [CloudAccountStatus] = []
@@ -1227,6 +1232,100 @@ public final class AppState: ObservableObject {
         }
     }
 
+    // MARK: - Active Port & Local Server Killer Actions
+
+    public func refreshListeningPorts(silent: Bool = false) {
+        guard !isScanningPorts else { return }
+        isScanningPorts = true
+        let service = portKillerService
+        let prevSelectedIDs = Set(portKillerSnapshot.items.filter(\.isSelected).map(\.id))
+
+        Task.detached(priority: .userInitiated) {
+            var snap = service.scanListeningPorts()
+            for idx in snap.items.indices {
+                if prevSelectedIDs.contains(snap.items[idx].id) {
+                    snap.items[idx].isSelected = true
+                }
+            }
+            let updatedSnap = snap
+            await MainActor.run {
+                self.portKillerSnapshot = updatedSnap
+                self.isScanningPorts = false
+            }
+        }
+    }
+
+    public func togglePortItemSelection(id: String) {
+        if let idx = portKillerSnapshot.items.firstIndex(where: { $0.id == id }),
+           !portKillerSnapshot.items[idx].isSystemProtected {
+            portKillerSnapshot.items[idx].isSelected.toggle()
+        }
+    }
+
+    public func selectPortItems(category: PortServiceCategory) {
+        for idx in portKillerSnapshot.items.indices where !portKillerSnapshot.items[idx].isSystemProtected {
+            portKillerSnapshot.items[idx].isSelected = (portKillerSnapshot.items[idx].category == category)
+        }
+    }
+
+    public func clearPortSelection() {
+        for idx in portKillerSnapshot.items.indices {
+            portKillerSnapshot.items[idx].isSelected = false
+        }
+    }
+
+    public func killListeningPort(_ item: ActivePortItem, force: Bool) {
+        let service = portKillerService
+        Task.detached(priority: .userInitiated) {
+            let res = service.terminatePort(item, force: force)
+            await MainActor.run {
+                self.showBanner(res.message)
+                if res.success {
+                    self.stats.totalMaintenanceTasksRun += 1
+                    self.stats.totalTimeSavedMinutes += 2
+                }
+                self.refreshListeningPorts()
+            }
+        }
+    }
+
+    public func killPortByNumber(_ port: Int, force: Bool) {
+        let service = portKillerService
+        let currentSnap = portKillerSnapshot
+        Task.detached(priority: .userInitiated) {
+            let res = service.terminatePortNumber(port, in: currentSnap, force: force)
+            await MainActor.run {
+                self.showBanner(res.message)
+                if res.success {
+                    self.stats.totalMaintenanceTasksRun += 1
+                    self.stats.totalTimeSavedMinutes += 2
+                }
+                self.refreshListeningPorts()
+            }
+        }
+    }
+
+    public func killSelectedPorts(force: Bool) {
+        let targets = portKillerSnapshot.items.filter { $0.isSelected && !$0.isSystemProtected }
+        guard !targets.isEmpty else { return }
+        let service = portKillerService
+        Task.detached(priority: .userInitiated) {
+            var killed = 0
+            for item in targets {
+                if service.terminatePort(item, force: force).success {
+                    killed += 1
+                }
+            }
+            let count = killed
+            await MainActor.run {
+                self.showBanner("\(force ? "Force-killed" : "Stopped") \(count) of \(targets.count) selected port(s)")
+                self.stats.totalMaintenanceTasksRun += count
+                self.stats.totalTimeSavedMinutes += max(2, count * 2)
+                self.refreshListeningPorts()
+            }
+        }
+    }
+
     public func scanCloudProvider(_ account: CloudAccountStatus) {
         activeTask?.cancel()
         cloudScanningProvider = account.provider
@@ -1286,6 +1385,7 @@ public final class AppState: ObservableObject {
         case "duplicateFinder", "similarImages", "largeAndOld", "downloads": startClutterScan()
         case "spaceLens": startSpaceLensScan()
         case "devAISweeper": startDevAISweeperScan()
+        case "portKiller": refreshListeningPorts()
         case "emailCleanup": startEmailScan()
         default: break
         }

@@ -12,6 +12,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable, Sendabl
     case myClutter = "My Clutter"
     case spaceLens = "Space Lens"
     case devAISweeper = "Dev & AI Sweeper"
+    case portKiller = "Port Killer"
     case cloudCleanup = "Cloud Cleanup"
     case emailCleanup = "Email Cleanup"
     case myTools = "My Tools"
@@ -29,6 +30,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable, Sendabl
         case .myClutter: return "Sort through your files and reduce the mess in just a few clicks."
         case .spaceLens: return "Visualize what's taking up the most disk space and clean up quickly."
         case .devAISweeper: return "Sweep stale node_modules, Rust/Swift/Gradle builds, Xcode, Docker, and local AI caches."
+        case .portKiller: return "Inspect active TCP ports, identify local dev servers & project folders, and kill stuck ports in one click."
         case .cloudCleanup: return "Tidy up your cloud files to save space and keep your storage in check."
         case .emailCleanup: return "Clear out inbox clutter and unsubscribe from unwanted newsletters."
         case .myTools: return "Quick tools for focused tasks — clean up, protect, and maintain your Mac."
@@ -46,6 +48,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable, Sendabl
         case .myClutter: return "doc.on.doc.fill"
         case .spaceLens: return "circle.hexagongrid.fill"
         case .devAISweeper: return "terminal.fill"
+        case .portKiller: return "network.badge.shield.half.filled"
         case .cloudCleanup: return "icloud.fill"
         case .emailCleanup: return "envelope.badge.fill"
         case .myTools: return "wrench.and.screwdriver.fill"
@@ -55,7 +58,7 @@ public enum RCleanerModule: String, CaseIterable, Identifiable, Codable, Sendabl
 
     public var badgeText: String? {
         switch self {
-        case .devAISweeper: return "New"
+        case .devAISweeper, .portKiller: return "New"
         default: return nil
         }
     }
@@ -884,6 +887,152 @@ public struct DevAISweeperScanResult: Sendable {
     }
 
     public func count(for category: DevAISweeperCategory) -> Int {
+        items.filter { $0.category == category }.count
+    }
+}
+
+// MARK: - Active Port & Local Server Killer Models
+
+public enum PortServiceCategory: String, CaseIterable, Identifiable, Codable, Sendable {
+    case devWebServer = "Dev & Web Servers"
+    case databaseCache = "Databases & Cache"
+    case aiAndMobile = "AI & Mobile SDKs"
+    case ideAndTools = "IDE & Desktop Apps"
+    case macOSSystem = "macOS Services"
+
+    public var id: String { rawValue }
+
+    public var shortTitle: String {
+        switch self {
+        case .devWebServer: return "Dev Servers"
+        case .databaseCache: return "Databases"
+        case .aiAndMobile: return "AI & Mobile"
+        case .ideAndTools: return "IDEs & Apps"
+        case .macOSSystem: return "macOS"
+        }
+    }
+
+    public var iconName: String {
+        switch self {
+        case .devWebServer: return "globe"
+        case .databaseCache: return "cylinder.split.1x2.fill"
+        case .aiAndMobile: return "cpu.fill"
+        case .ideAndTools: return "hammer.fill"
+        case .macOSSystem: return "apple.logo"
+        }
+    }
+
+    public var accentHex: String {
+        switch self {
+        case .devWebServer: return "00F5D4"
+        case .databaseCache: return "FFB703"
+        case .aiAndMobile: return "C77DFF"
+        case .ideAndTools: return "38BDF8"
+        case .macOSSystem: return "94A3B8"
+        }
+    }
+}
+
+public struct ActivePortItem: Identifiable, Hashable, Sendable {
+    public var id: String { "\(pid)-\(port)" }
+    public let port: Int
+    public let pid: Int32
+    public let processName: String
+    public let displayTitle: String
+    public let frameworkLabel: String
+    public let category: PortServiceCategory
+    public let bindAddress: String
+    public let isExposedToLAN: Bool
+    public let workingDirectory: String?
+    public let projectDisplayName: String?
+    public let commandLine: String
+    public let executablePath: String?
+    public let cpuPercent: Double
+    public let memoryBytes: Int64
+    public let uptimeLabel: String
+    public let isSystemProtected: Bool
+    public var isSelected: Bool
+
+    public var localWebURL: URL? {
+        // Common HTTP/web server ports or dev servers
+        let webPorts: Set<Int> = [80, 443, 3000, 3001, 3002, 4000, 4173, 4200, 4321, 5000, 5173, 5174, 5175, 5500, 8000, 8080, 8081, 8787, 8888, 9000, 11434]
+        if category == .devWebServer || webPorts.contains(port) || (port >= 3000 && port <= 9999 && category != .databaseCache) {
+            return URL(string: "http://localhost:\(port)")
+        }
+        return nil
+    }
+
+    public init(
+        port: Int,
+        pid: Int32,
+        processName: String,
+        displayTitle: String,
+        frameworkLabel: String,
+        category: PortServiceCategory,
+        bindAddress: String,
+        isExposedToLAN: Bool,
+        workingDirectory: String?,
+        projectDisplayName: String?,
+        commandLine: String,
+        executablePath: String?,
+        cpuPercent: Double,
+        memoryBytes: Int64,
+        uptimeLabel: String,
+        isSystemProtected: Bool,
+        isSelected: Bool = false
+    ) {
+        self.port = port
+        self.pid = pid
+        self.processName = processName
+        self.displayTitle = displayTitle
+        self.frameworkLabel = frameworkLabel
+        self.category = category
+        self.bindAddress = bindAddress
+        self.isExposedToLAN = isExposedToLAN
+        self.workingDirectory = workingDirectory
+        self.projectDisplayName = projectDisplayName
+        self.commandLine = commandLine
+        self.executablePath = executablePath
+        self.cpuPercent = cpuPercent
+        self.memoryBytes = memoryBytes
+        self.uptimeLabel = uptimeLabel
+        self.isSystemProtected = isSystemProtected
+        self.isSelected = isSelected
+    }
+}
+
+public struct PortKillerSnapshot: Sendable {
+    public var items: [ActivePortItem] = []
+    public var lastUpdated: Date = Date()
+
+    public init(items: [ActivePortItem] = [], lastUpdated: Date = Date()) {
+        self.items = items
+        self.lastUpdated = lastUpdated
+    }
+
+    public var totalMemoryBytes: Int64 {
+        // Sum unique PIDs so a process listening on 2 ports isn't double-counted
+        var seen = Set<Int32>()
+        var sum: Int64 = 0
+        for item in items where seen.insert(item.pid).inserted {
+            sum += item.memoryBytes
+        }
+        return sum
+    }
+
+    public var devServersCount: Int {
+        items.filter { $0.category == .devWebServer }.count
+    }
+
+    public var databasesAndAICount: Int {
+        items.filter { $0.category == .databaseCache || $0.category == .aiAndMobile }.count
+    }
+
+    public var lanExposedCount: Int {
+        items.filter(\.isExposedToLAN).count
+    }
+
+    public func count(for category: PortServiceCategory) -> Int {
         items.filter { $0.category == category }.count
     }
 }
